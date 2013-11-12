@@ -41,11 +41,11 @@ from omero.work.client import Client
 
 
 def distribute_func(function, args_list=[[]], server="localhost"):
-    func_str = function.__module__ + function.__name__
+    func_str = function.__module__+"."+function.__name__
     path_str = ":".join(sys.path)
-    Client().send_job("func", func_str, path_str, args_list)
+    return Client().send_job("func", func_str, path_str, args_list)
 
 
 def distribute_cmd(cmd, args_list=[[]], server="localhost"):
     path = os.getenv("PATH")
-    Client().send_job("cmd", cmd, path, args_list)
+    return Client().send_job("cmd", cmd, path, args_list)
