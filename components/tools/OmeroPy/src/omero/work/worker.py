@@ -34,6 +34,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import os
 import sys
 import logging
+import pickle
 import importlib
 
 from subprocess import Popen, PIPE, STDOUT
@@ -160,7 +161,8 @@ class Worker(object):
                 log.debug("Unrecognized work type: %s", work_type)
                 raise ValueError()
             log.debug("Work finished: %s" % out)
-            out_sock.send_multipart([work_id, "DONE", str(out)])
+            out_sock.send_multipart([work_id, "DONE", pickle.dumps(out)])
+            log.debug("Sent results for work ID: %s" % work_id)
         except:
             _, msg, _ = sys.exc_info()
             log.debug("Problem performing work: %s" % msg)
