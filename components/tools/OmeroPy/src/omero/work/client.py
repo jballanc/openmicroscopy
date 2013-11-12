@@ -36,14 +36,12 @@ import pickle
 import random
 import string
 
-from threading import Thread
+from multiprocessing import Process, Pipe
 
 import zmq
-from zmq.eventloop.ioloop import ZMQIOLoop
-from zmq.eventloop.zmqstream import ZMQStream
 
 import logging
-log = logging.getLogger("work.server")
+log = logging.getLogger("work.client")
 if os.getenv("DEBUG"):
     logging.basicConfig(level=logging.DEBUG)
 else:
@@ -64,19 +62,26 @@ class Client(object):
         self.ctrl_sock = self.ctx.socket(zmq.PUSH)
         self.ctrl_sock.connect(self.ctrl_addr)
 
-    def listen(self):
-        resp_sock = self.ctx.socket(zmq.SUB)
+    def listen(self, write):
+        resp_sock = zmq.Context().socket(zmq.SUB)
         resp_sock.subscribe = self.id
         resp_sock.connect(self.resp_addr)
-        stream = ZMQStream(resp_sock)
-        stream.on_recv_stream(self.get_results)
 
-        ZMQIOLoop.instance().start()
+        log.debug("Ready to listen for a response...")
+
+        msg = resp_sock.recv_multipart()
+
+        log.debug("Received results: %s" % str(msg))
+        if msg[1] == "DONE":
+            write.send(msg[2])
+            write.close()
+            resp_sock.close()
 
     def send_job(self, work_type, cmd_or_func, path, args_list):
         # Setup response channel first
-        listen_thread = Thread(target=self.listen)
-        listen_thread.start()
+        read, write = Pipe()
+        p = Process(target=self.listen, args=[write])
+        p.start()
 
         # Send job request
         log.info("Sending job: %s | %s" % (cmd_or_func, str(args_list)))
@@ -85,10 +90,8 @@ class Client(object):
                                        path, args])
 
         # Wait for the results
-        listen_thread.join()
-        self.results
-
-    def get_results(self, stream, msg):
-        self.results = pickle.loads(msg)
-        stream.close()
-        ZMQIOLoop.instance().stop()
+        p.join()
+        out = read.recv()
+        log.debug("Result from listener: %s" % str(out))
+        read.close()
+        return pickle.loads(out)
