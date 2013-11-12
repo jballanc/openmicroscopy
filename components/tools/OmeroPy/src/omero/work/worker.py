@@ -1,31 +1,60 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-   Work distribution worker process
 
-   Copyright 2013 Glencoe Software, Inc. All rights reserved.
-   Use is subject to license terms supplied in LICENSE.txt
+:author: Joshua Ballanco <jballanc@glencoesoftware.com>
+
+Work processing worker
+
+Copyright (C) 2013 Glencoe Software, Inc.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS 'AS IS' AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
 
 import os
 import sys
+import logging
 import importlib
 
-from subprocess import Popen, PIPE
+from subprocess import Popen, PIPE, STDOUT
 from multiprocessing import Process, Pipe
 
 import zmq
 from zmq.eventloop.ioloop import ZMQIOLoop
 from zmq.eventloop.zmqstream import ZMQStream
 
-
-def debug_log(msg):
-    if os.getenv("DEBUG"):
-        print msg
+log = logging.getLogger("work.worker")
+if os.getenv("DEBUG"):
+    logging.basicConfig(level=logging.DEBUG)
+else:
+    logging.basicConfig(level=logging.INFO)
 
 
 def hosted_func(func_spec):
+    """
+    Simple function wrapper for running a function in a subprocess and
+    communicating the output back to the parent process via pipe.
+    """
     module_name, func_name = func_spec.rsplit(".", 1)
     try:
         module = importlib.import_module(module_name)
@@ -52,24 +81,27 @@ def hosted_func(func_spec):
     return __target_func
 
 
-def exec_cmd(cmd):
-    child = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+def exec_cmd(cmd, path="", args=()):
+    cmd = [cmd]+args
+    env = os.environ
+    env["PATH"] = path
+    log.debug("Executing command: %s" % cmd)
+
+    child = Popen(cmd, stdout=PIPE, stderr=STDOUT, env=env)
     child_out = ""
-    child_err = ""
 
     # TODO: Polling kinda sucks...`select` would be better
     while child.poll() is None:
-        out, err = child.communicate()
+        out, _ = child.communicate()
         child_out += out
-        child_err += err
 
     if child.returncode == 0:
         return child_out
     else:
-        return "Problem executing command: %s" % child_err
+        return "Problem executing command: %s" % child_out
 
 
-def exec_func(func_spec, args=(), kwargs={}):
+def exec_func(func_spec, python_path="", args=(), kwargs={}):
     parent, child = Pipe()
     target = hosted_func(func_spec)
     p = Process(target=target, args=[child]+args, kwargs=kwargs)
@@ -83,14 +115,22 @@ def exec_func(func_spec, args=(), kwargs={}):
 
 
 class Worker(object):
+    """
+    The Worker class encapsulates a worker process that waits on a socket for
+    incoming work requests. Work requests are received on a ZeroMQ "PULL"
+    socket as a multipart message. The message consists of a tuple of work ID,
+    work type (command-line or function), the filesystem path for a command or
+    full module import path for a function, and a list of arguments. Once the
+    work is completed, the output of the command or return value from the
+    function is communicated back to the server via a ZeroMQ "PUB" socket.
+
+    Note: The first argument must be the full PATH or PYTHON_PATH from the
+    client machine for the command or function to call.
+    """
     def __init__(self, server_addr,
                  protocol="tcp",
                  work_port=5557,
                  comm_port=5558):
-        self.server_addr = server_addr
-        self.protocol = protocol
-        self.work_port = work_port
-        self.comm_port = comm_port
         self.work_addr = "%s://%s:%s" % (protocol, server_addr, work_port)
         self.comm_addr = "%s://%s:%s" % (protocol, server_addr, comm_port)
 
@@ -99,24 +139,31 @@ class Worker(object):
         self.work_sock.connect(self.work_addr)
 
     def do_work(self, msg):
-        if os.getenv("DEBUG"):
-            print "Received work: %s" % msg
-        work_id, work_type, cmd_or_func = msg[:3]
-        args = msg[3:]
+        log.info("Received work request: %s" % str(msg))
+        work_id, work_type, cmd_or_func, path = msg[:4]
+        args = msg[4:]
         out_sock = self.ctx.socket(zmq.PUB)
         out_sock.connect(self.comm_addr)
+
+        # The server must open it's corresponding "SUB" socket before
+        # distributing work. This initial response on the worker's "PUB" socket
+        # is intended to overcome the ZeroMQ limitation that the first message
+        # on a PUB/SUB pair is always missed by the subscriber.
         out_sock.send_multipart([work_id, "ACK"])
 
         try:
             if work_type == "func":
-                out = exec_func(cmd_or_func, args=args)
+                out = exec_func(cmd_or_func, python_path=path, args=args)
+            elif work_type == "cmd":
+                out = exec_cmd(cmd_or_func, path=path, args=args)
             else:
-                out = exec_cmd([cmd_or_func, args])
-            debug_log("Work finished: %s" % out)
+                log.debug("Unrecognized work type: %s", work_type)
+                raise ValueError()
+            log.debug("Work finished: %s" % out)
             out_sock.send_multipart([work_id, "DONE", str(out)])
         except:
             _, msg, _ = sys.exc_info()
-            debug_log("Problem performing work: %s" % msg)
+            log.debug("Problem performing work: %s" % msg)
             out_sock.send_multipart([work_id, "FAIL", msg])
         finally:
             out_sock.close()
@@ -124,9 +171,11 @@ class Worker(object):
     def wait_for_work(self):
         self.work_stream = ZMQStream(self.work_sock)
         self.work_stream.on_recv(self.do_work)
-        debug_log("Starting event loop...")
+
+        log.info("Listening for work at %s", self.work_addr)
+
         ZMQIOLoop.instance().start()
 
 if __name__ == "__main__":
-    worker = Worker("localhost", work_port=5557, comm_port=5558)
+    worker = Worker("localhost")
     worker.wait_for_work()
