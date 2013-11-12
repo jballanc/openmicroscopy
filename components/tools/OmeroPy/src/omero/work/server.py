@@ -80,6 +80,7 @@ class Batch(object):
         log.debug("Batch results recieved: %s" % str(msg))
         work_id, state = msg[:2]
         batch_id, idx = work_id.split("-")
+        idx = int(idx)
         if batch_id != self.id:
             log.debug("Received results for batch id: %s, expected id: %s" %
                       batch_id, self.id)
@@ -87,7 +88,6 @@ class Batch(object):
 
         if state == "DONE":
             out = pickle.loads(msg[2])
-            log.info("Received results from job id %s: %s" % work_id, out)
             self.batch_list[idx]["out"] = out
 
             # Check to see if any batch items are missing output, while
@@ -129,7 +129,7 @@ class Server(object):
     def send_job(self, msg):
         log.info("Received job request: %s" % str(msg))
         client_id, work_type, cmd_or_func, path = msg[:4]
-        arg_list = pickle.loads(msg[4])
+        args_list = pickle.loads(msg[4])
 
         # Prepare a socket to send the response to the client
         resp_sock = self.ctx.socket(zmq.PUB)
@@ -138,9 +138,10 @@ class Server(object):
 
         # Create the batch and prepare the communication socket to receive
         # responses from the workers
-        batch = Batch(work_type, cmd_or_func, path=path, args_list=arg_list)
+        batch = Batch(work_type, cmd_or_func, path=path, args_list=args_list)
         comm_sock = self.ctx.socket(zmq.SUB)
         comm_sock.subscribe = batch.id
+        comm_sock.bind(self.comm_addr)
 
         # Set up the stream to receive results from the workers. Also attach
         # the batch and the response socket so we can record the worker
@@ -160,7 +161,7 @@ class Server(object):
         stream.batch.put_result(msg)
         if stream.batch.finished:
             log.info("Batch %s finished!" % stream.batch.id)
-            stream.resp_sock.send_multipart(stream.batch.results)
+            stream.resp_sock.send(pickle.dumps(stream.batch.results))
             stream.resp_sock.close()
             stream.stop_on_recv()
             stream.close()
