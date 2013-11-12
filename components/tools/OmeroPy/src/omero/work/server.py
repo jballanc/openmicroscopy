@@ -125,6 +125,8 @@ class Server(object):
         self.work_sock.bind(self.work_addr)
         self.ctrl_sock = self.ctx.socket(zmq.PULL)
         self.ctrl_sock.bind(self.ctrl_addr)
+        self.resp_sock = self.ctx.socket(zmq.PUB)
+        self.resp_sock.bind(self.resp_addr)
 
     def send_job(self, msg):
         log.info("Received job request: %s" % str(msg[:3]))
@@ -133,10 +135,8 @@ class Server(object):
         log.debug("Job path: %s" % path)
         log.debug("Arguments: %s" % str(args_list))
 
-        # Prepare a socket to send the response to the client
-        resp_sock = self.ctx.socket(zmq.PUB)
-        resp_sock.bind(self.resp_addr)
-        resp_sock.send_multipart([client_id, "ACK"])
+        # Prepare the socket to send the response to the client
+        self.resp_sock.send_multipart([client_id, "ACK"])
 
         # Create the batch and prepare the communication socket to receive
         # responses from the workers
@@ -149,7 +149,7 @@ class Server(object):
         # the batch and the response socket so we can record the worker
         # responses and send results to the client when the work is finished.
         stream = ZMQStream(comm_sock)
-        stream.resp_sock = resp_sock
+        stream.client_id = client_id
         stream.batch = batch
         stream.on_recv_stream(self.recv_results)
 
