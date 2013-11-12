@@ -30,3 +30,22 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 """
+
+import os
+import sys
+
+from omero.work.client import Client
+
+# TODO: The "server" param should go away once the client can query the
+# OMERO.server settings for the location of the server.
+
+
+def distribute_func(function, args_list=[[]], server="localhost"):
+    func_str = function.__module__ + function.__name__
+    path_str = ":".join(sys.path)
+    Client().send_job("func", func_str, path_str, args_list)
+
+
+def distribute_cmd(cmd, args_list=[[]], server="localhost"):
+    path = os.getenv("PATH")
+    Client().send_job("cmd", cmd, path, args_list)
