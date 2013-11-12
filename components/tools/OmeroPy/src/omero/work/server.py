@@ -127,9 +127,11 @@ class Server(object):
         self.ctrl_sock.bind(self.ctrl_addr)
 
     def send_job(self, msg):
-        log.info("Received job request: %s" % str(msg))
+        log.info("Received job request: %s" % str(msg[:3]))
         client_id, work_type, cmd_or_func, path = msg[:4]
         args_list = pickle.loads(msg[4])
+        log.debug("Job path: %s" % path)
+        log.debug("Arguments: %s" % str(args_list))
 
         # Prepare a socket to send the response to the client
         resp_sock = self.ctx.socket(zmq.PUB)
