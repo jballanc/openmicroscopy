@@ -51,32 +51,32 @@ else:
     logging.basicConfig(level=logging.INFO)
 
 
-def hosted_func(func_spec):
+def hosted_func(func_spec, pythonpath):
     """
     Simple function wrapper for running a function in a subprocess and
     communicating the output back to the parent process via pipe.
     """
-    module_name, func_name = func_spec.rsplit(".", 1)
-    try:
-        module = importlib.import_module(module_name)
-        func = getattr(module, func_name)
+    def __target_func(pipe, *args, **kwargs):
+        module_name, func_name = func_spec.rsplit(".", 1)
+        sys.path = pythonpath
+        try:
+            module = importlib.import_module(module_name)
+            func = getattr(module, func_name)
 
-        def __target_func(pipe, *args, **kwargs):
             rv = func(*args, **kwargs)
-            pipe.send([True, rv])
-            pipe.close()
+            success = True
 
-    except:
-        err_type, msg, _ = sys.exc_info()
-        if err_type == ImportError:
-            msg = """
-                  ERROR: Could not import function -- %s
+        except:
+            err_type, msg, _ = sys.exc_info()
+            success = False
+            if err_type == ImportError:
+                msg = """
+                      ERROR: Could not import function -- %s
 
-                  %s
-                  """ % (func_spec, msg)
-
-        def __target_func(pipe, *args, **kwargs):
-            pipe.send([False, msg])
+                      %s
+                      """ % (func_spec, msg)
+        finally:
+            pipe.send([success, rv])
             pipe.close()
 
     return __target_func
@@ -102,9 +102,10 @@ def exec_cmd(cmd, path="", args=()):
         return "Problem executing command: %s" % child_out
 
 
-def exec_func(func_spec, python_path="", args=(), kwargs={}):
+def exec_func(func_spec, path=":".join(sys.path), args=(), kwargs={}):
     parent, child = Pipe()
-    target = hosted_func(func_spec)
+    pythonpath = path.split(":")
+    target = hosted_func(func_spec, pythonpath)
     p = Process(target=target, args=[child]+args, kwargs=kwargs)
     p.start()
     p.join()
@@ -154,7 +155,7 @@ class Worker(object):
 
         try:
             if work_type == "func":
-                out = exec_func(cmd_or_func, python_path=path, args=args)
+                out = exec_func(cmd_or_func, path=path, args=args)
             elif work_type == "cmd":
                 out = exec_cmd(cmd_or_func, path=path, args=args)
             else:
