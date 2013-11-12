@@ -161,8 +161,11 @@ class Server(object):
         stream.batch.put_result(msg)
         if stream.batch.finished:
             log.info("Batch %s finished!" % stream.batch.id)
-            stream.resp_sock.send(pickle.dumps(stream.batch.results))
-            stream.resp_sock.close()
+            resp = [stream.client_id,
+                    "DONE",
+                    pickle.dumps(stream.batch.results)]
+            self.resp_sock.send_multipart(resp)
+            log.debug("Sent response to client: %s" % resp)
             stream.stop_on_recv()
             stream.close()
 
