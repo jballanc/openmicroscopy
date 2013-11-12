@@ -57,6 +57,7 @@ def hosted_func(func_spec, pythonpath):
     communicating the output back to the parent process via pipe.
     """
     def __target_func(pipe, *args, **kwargs):
+        log.debug("Running function: %s" % func_spec)
         module_name, func_name = func_spec.rsplit(".", 1)
         sys.path = pythonpath
         try:
@@ -141,9 +142,12 @@ class Worker(object):
         self.work_sock.connect(self.work_addr)
 
     def do_work(self, msg):
-        log.info("Received work request: %s" % str(msg))
+        log.info("Received work request: %s" % str(msg[:3]))
         work_id, work_type, cmd_or_func, path = msg[:4]
         args = msg[4:]
+        log.debug("Work path: %s" % path)
+        log.debug("Arguments: %s" % str(args))
+
         out_sock = self.ctx.socket(zmq.PUB)
         out_sock.connect(self.comm_addr)
 
