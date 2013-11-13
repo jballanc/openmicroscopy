@@ -69,11 +69,18 @@ class Client(object):
 
         log.debug("Ready to listen for a response...")
 
-        msg = resp_sock.recv_multipart()
-
-        log.debug("Received results: %s" % str(msg))
-        if msg[1] == "DONE":
-            write.send(msg[2])
+        try:
+            while True:
+                msg = resp_sock.recv_multipart()
+                log.debug("Received results: %s" % str(msg))
+                if msg[1] == "ACK":
+                    continue
+                elif msg[1] == "DONE":
+                    write.send(msg[2])
+                    break
+                else:
+                    log.debug("Unexpected server status: %s" % msg[1])
+        finally:
             write.close()
             resp_sock.close()
 
