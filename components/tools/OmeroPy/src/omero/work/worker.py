@@ -144,7 +144,7 @@ class Worker(object):
     def do_work(self, msg):
         log.info("Received work request: %s" % str(msg[:3]))
         work_id, work_type, cmd_or_func, path = msg[:4]
-        args = msg[4:]
+        args = pickle.loads(msg[4])
         log.debug("Work path: %s" % path)
         log.debug("Arguments: %s" % str(args))
 

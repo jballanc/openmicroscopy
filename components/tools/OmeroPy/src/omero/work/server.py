@@ -69,12 +69,8 @@ class Batch(object):
 
     def work_items(self):
         for idx, batch_item in enumerate(self.batch_list):
-            work_item = [self.id+"-"+str(idx),
-                         self.work_type,
-                         self.cmd_or_func,
-                         self.path]
-            work_item += batch_item["args"]
-            yield work_item
+            yield [self.id+"-"+str(idx), self.work_type, self.cmd_or_func,
+                   self.path, batch_item["args"]]
 
     def put_result(self, msg):
         log.debug("Batch results recieved: %s" % str(msg))
