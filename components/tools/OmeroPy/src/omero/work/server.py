@@ -61,7 +61,8 @@ class Batch(object):
         self.work_type = work_type
         self.cmd_or_func = cmd_or_func
         self.path = path
-        self.batch_list = [{"args": args, "out": None} for args in args_list]
+        self.batch_list = [{"args": pickle.dumps(args), "out": None,
+                            "finished": False} for args in args_list]
 
         # For use when the batch is finished processing:
         self.finished = False
@@ -85,12 +86,13 @@ class Batch(object):
         if state == "DONE":
             out = pickle.loads(msg[2])
             self.batch_list[idx]["out"] = out
+            self.batch_list[idx]["finished"] = True
 
             # Check to see if any batch items are missing output, while
             # gathering output that has already been collected
             finished = True
             for idx, batch_item in enumerate(self.batch_list):
-                if batch_item["out"] is None:
+                if not batch_item["finished"]:
                     finished = False
                     break
                 elif len(self.results) <= idx:
