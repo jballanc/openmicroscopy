@@ -76,6 +76,7 @@ def hosted_func(func_spec, pythonpath):
 
                       %s
                       """ % (func_spec, msg)
+            rv = msg
         finally:
             pipe.send([success, rv])
             pipe.close()
