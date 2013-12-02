@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN//EN"
+  "http://www.springframework.org/dtd/spring-beans.dtd">
+
+<beans>
+  <description>
+    Sets up an embedded HornetQ server with default file based configuration.
+  </description>
+
+  <bean id="EmbeddedJms"
+        class="org.hornetq.integration.spring.SpringJmsBootstrap"
+        init-method="start"/>
+</beans>
