@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN//EN"
+  "http://www.springframework.org/dtd/spring-beans.dtd">
+
+<beans>
+  <description>
+    Sets up an embedded HornetQ server with default file based configuration,
+    and provides a bean for placing messages on the firehose.
+  </description>
+
+  <bean id="EmbeddedJms"
+        class="org.hornetq.integration.spring.SpringJmsBootstrap"
+        init-method="start"
+        destroy-method="stop"/>
+
+  <bean id="eventFirehose" class="ome.services.firehose.EventFirehose">
+    <property name="connectionFactory" ref="ConnectionFactory"/>
+    <property name="destination" ref="/topic/firehose"/>
+  </bean>
+
+</beans>

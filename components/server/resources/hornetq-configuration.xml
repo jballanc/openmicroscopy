@@ -1,0 +1,16 @@
+<configuration xmlns="urn:hornetq"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:schemaLocation="urn:hornetq /schema/hornetq-configuration.xsd">
+
+   <journal-type>NIO</journal-type>
+
+   <security-enabled>false</security-enabled>
+
+   <acceptors>
+     <acceptor name="stomp-acceptor">
+       <factory-class>org.hornetq.core.remoting.impl.netty.NettyAcceptorFactory</factory-class>
+       <param key="port" value="61613"/>
+     </acceptor>
+   </acceptors>
+
+</configuration>
