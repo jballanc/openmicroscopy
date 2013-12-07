@@ -34,7 +34,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 import os
 import sys
 import logging
+import time
+import atexit
+import signal
 import pickle
+import argparse
 import importlib
 
 from subprocess import Popen, PIPE, STDOUT
@@ -45,10 +49,134 @@ from zmq.eventloop.ioloop import ZMQIOLoop
 from zmq.eventloop.zmqstream import ZMQStream
 
 log = logging.getLogger("work.worker")
-if os.getenv("DEBUG"):
-    logging.basicConfig(level=logging.DEBUG)
-else:
-    logging.basicConfig(level=logging.INFO)
+
+# TODO: Put pidfile in a more canonical location
+pidfile = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "worker.pid")
+
+# NOTE: This is a temporary workaround until switching to a more proper means
+# of logging to a file
+logfile = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "worker.log")
+
+
+def script_main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-v", "--verbose", action="store_true", dest="debug",
+                        help="Log events at the DEBUG level")
+    parser.add_argument("-n", "--num-workers", type=int, default=1,
+                        help="Number of worker processes to start")
+    parser.add_argument("-s", "--server", default="localhost",
+                        help="Hostname of work server")
+
+    # NOTE: Will need to expand the run options as subparsers when this is
+    # built out as a proper plugin.
+    parser.add_argument("command", choices=["run", "start", "stop"],
+                        nargs="?", default="run",
+                        help="""Run the worker synchronously or start/stop it\
+                                as a daemon process""")
+    args = parser.parse_args()
+
+    if args.debug or os.getenv("DEBUG"):
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+    if args.command == "start":
+        try:
+            with open(pidfile, "r") as f:
+                pid = int(f.read().strip())
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                sys.stderr.write("There seems to be a stale PID file.\n")
+            else:
+                sys.stderr.write("A worker daemon is already running.\n")
+            finally:
+                sys.exit(1)
+        except IOError:
+            # No pidfile, so go ahead...
+            daemonize_worker()
+    elif args.command == "stop":
+        try:
+            with open(pidfile, "r") as f:
+                pid = int(f.read().strip())
+            try:
+                print "Killing worker",
+                while True:
+                    print ".",
+                    os.kill(pid, signal.SIGTERM)
+                    time.sleep(0.1)
+            except OSError:
+                sys.exit(0)
+        except IOError:
+            sys.stderr.write("Could not find pidfile.\n")
+            sys.exit(1)
+        else:
+            sys.exit(0)
+    elif args.command == "run":
+        log.info("Running worker in foreground...")
+
+    procs = list()
+    for i in range(args.num_workers):
+        p = Process(target=spawn_worker, args=(args.server, i))
+        p.start()
+        procs.append(p)
+
+    def clean_procs(signum, frame):
+        log.info("Cleaning up worker processes...")
+        for p in procs:
+            p.terminate()
+        sys.exit(0)
+    for sig in [signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT]:
+        signal.signal(sig, clean_procs)
+
+    # TODO: Implement better monitoring logic to retart processes if parent
+    # isn't dead...
+    for p in procs:
+        p.join()
+
+
+def daemonize_worker():
+    try:
+        pid = os.fork()
+        if pid > 0:
+            sys.exit(0)
+        os.chdir("/")
+        os.setsid()
+        os.umask(0)
+        pid = os.fork()
+        if pid > 0:
+            sys.exit(0)
+    except OSError, e:
+        sys.stderr.write("Failed to daemonize worker: %d (%s)"
+                         % (e.errno, e.strerror))
+        sys.exit(1)
+    sys.stdin.close()
+    sys.stdout.flush()
+    sys.stderr.flush()
+    log = file(logfile, "a+", 0)
+    os.dup2(log.fileno(), sys.stdout.fileno())
+    os.dup2(log.fileno(), sys.stderr.fileno())
+
+    with open(pidfile, "w+") as f:
+        f.write("%s\n" % str(os.getpid()))
+
+    atexit.register(daemon_cleanup)
+
+
+def daemon_cleanup():
+    os.remove(pidfile)
+
+
+def spawn_worker(server, seq_num):
+    global log
+    try:
+        log = log.getChild(str(seq_num))
+        Worker(server).wait_for_work()
+    except:
+        # Swallow exceptions so we can die cleanly
+        err_type, msg, _ = sys.exc_info()
+        log.debug("Worker raised exception: %s -- %s" % (err_type, msg))
 
 
 def hosted_func(func_spec, pythonpath):
@@ -185,5 +313,4 @@ class Worker(object):
         ZMQIOLoop.instance().start()
 
 if __name__ == "__main__":
-    worker = Worker("localhost")
-    worker.wait_for_work()
+    script_main()
