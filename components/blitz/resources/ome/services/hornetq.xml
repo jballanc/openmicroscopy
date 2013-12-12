@@ -4,10 +4,17 @@
 
 <beans>
   <description>
-    Sets up an embedded HornetQ server with default file based configuration.
+    Sets up an embedded HornetQ server with default file based configuration,
+    and provides a bean for placing messages on the firehose.
   </description>
 
   <bean id="EmbeddedJms"
         class="org.hornetq.integration.spring.SpringJmsBootstrap"
         init-method="start"/>
+
+  <bean id="eventFirehose" class="ome.services.messaging.EventFirehose">
+    <property name="connectionFactory" ref="ConnectionFactory"/>
+    <property name="destination" ref="/topic/firehose"/>
+  </bean>
+
 </beans>

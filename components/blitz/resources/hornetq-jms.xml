@@ -1,12 +1,27 @@
 <configuration xmlns="urn:hornetq"
-   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-   xsi:schemaLocation="urn:hornetq /schema/hornetq-jms.xsd">
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:schemaLocation="urn:hornetq /schema/hornetq-jms.xsd">
 
-   <queue name="test">
-     <entry name="/queue/test"/>
-   </queue>
+  <!-- factory for creating in VM connections to JMS -->
+  <connection-factory name="ConnectionFactory">
+    <connectors>
+      <connector-ref connector-name="in-vm"/>
+    </connectors>
+    <entries>
+      <entry name="ConnectionFactory"/>
+    </entries>
+  </connection-factory>
 
-   <topic name="alerts">
-     <entry name="/topic/alerts"/>
-   </topic>
+  <!-- ***** QUEUES ***** -->
+
+  <queue name="test">
+    <entry name="/queue/test"/>
+  </queue>
+
+  <!-- ***** TOPICS ***** -->
+
+  <topic name="firehose">
+    <entry name="/topic/firehose"/>
+  </topic>
+
 </configuration>
