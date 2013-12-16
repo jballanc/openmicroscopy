@@ -12,7 +12,7 @@
         class="org.hornetq.integration.spring.SpringJmsBootstrap"
         init-method="start"/>
 
-  <bean id="eventFirehose" class="ome.services.messaging.EventFirehose">
+  <bean id="eventFirehose" class="ome.services.firehose.EventFirehose">
     <property name="connectionFactory" ref="ConnectionFactory"/>
     <property name="destination" ref="/topic/firehose"/>
   </bean>

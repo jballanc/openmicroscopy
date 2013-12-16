@@ -1,4 +1,4 @@
-package ome.services.messaging;
+package ome.services.firehose;
 
 import java.util.List;
 import javax.jms.Connection;
