@@ -20,8 +20,13 @@
      </acceptor>
      <acceptor name="stomp-acceptor">
        <factory-class>org.hornetq.core.remoting.impl.netty.NettyAcceptorFactory</factory-class>
-       <param key="protocol"  value="stomp"/>
-       <param key="port"  value="61613"/>
+       <param key="protocol" value="stomp"/>
+       <param key="port" value="61613"/>
+     </acceptor>
+     <acceptor name="stomp-ws-acceptor">
+       <factory-class>org.hornetq.core.remoting.impl.netty.NettyAcceptorFactory</factory-class>
+       <param key="protocol" value="stomp_ws"/>
+       <param key="port" value="61614"/>
      </acceptor>
    </acceptors>
 
