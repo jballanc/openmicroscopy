@@ -10,7 +10,8 @@
 
   <bean id="EmbeddedJms"
         class="org.hornetq.integration.spring.SpringJmsBootstrap"
-        init-method="start"/>
+        init-method="start"
+        destroy-method="stop"/>
 
   <bean id="eventFirehose" class="ome.services.firehose.EventFirehose">
     <property name="connectionFactory" ref="ConnectionFactory"/>
