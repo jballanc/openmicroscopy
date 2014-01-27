@@ -29,6 +29,8 @@
     <dependency org="OME" name="ome-java" rev="${versions.ome-java}"/>
     <!-- Public -->
     <dependency org="gui" name="ini4j" rev="0.3.2"/>
+    <dependency org="org.clojure" name="clojure" rev="${versions.clojure}"/>
+    <dependency org="org.clojure" name="tools.nrepl" rev="${versions.clojure.tools.nrepl}"/>
   </dependencies>
 </ivy-module>
 
