@@ -32,12 +32,25 @@
     <script type="text/javascript">
         $(document).ready(function() {
             {% if share_id %}
-            var viewport = $.WeblitzViewport($("#viewport"), "{% url webindex %}{{ share_id }}", {'mediaroot': '{{ STATIC_URL }}' } );
+            var viewport = $.WeblitzViewport($("#viewport"), "{% url 'webindex' %}{{ share_id }}", {'mediaroot': '{{ STATIC_URL }}' } );
             viewport.load({{ manager.image.id }}, null, location.search);
             {% else %}
-            var viewport = $.WeblitzViewport($("#viewport"), "{% url webindex %}", {'mediaroot': '{{ STATIC_URL }}' } );
+            var viewport = $.WeblitzViewport($("#viewport"), "{% url 'webindex' %}", {'mediaroot': '{{ STATIC_URL }}' } );
             viewport.load({{ manager.image.id }});
             {% endif %}
+
+            var copy_paste_rdef_url = "{% url 'webgateway.views.copy_image_rdef_json' %}";
+            $(".btn.copy_rdef").click(function() {
+                $.getJSON(copy_paste_rdef_url + "?fromid={{ manager.image.id }}");
+            });
+
+            $(".btn.paste_rdef").click(function() {
+                $.getJSON(copy_paste_rdef_url + "?toids={{ manager.image.id }}", function(data){
+                    // update thumbnails
+                    OME.refreshThumbnails({{ manager.image.id }});
+                });
+            });
+
         });
     </script>
 
@@ -47,7 +60,7 @@
 	
 <!-- open-image link -->
 
-			<button class="btn silver btn_text" href="#" onclick="return OME.openPopup('{% if share_id %}{% url web_image_viewer share_id manager.image.id %}{% else %}{% url web_image_viewer manager.image.id %}{% endif %}')" alt="View" title="Open full viewer">
+			<button class="btn silver btn_text" href="#" onclick="return OME.openPopup('{% if share_id %}{% url 'web_image_viewer' share_id manager.image.id %}{% else %}{% url 'web_image_viewer' manager.image.id %}{% endif %}')" alt="View" title="Open full viewer">
 				<span>
                 {% trans "Launch full viewer" %} 
 				</span>
@@ -57,5 +70,17 @@
 
     <div class="miniview" id="viewport">
     </div>
+
+    <div style="clear:both"></div>
+    <hr>
+
+    Rendering Settings:
+    <button class="btn silver btn_text copy_rdef" title="Copy Rendering Settings">
+        <span>Copy</span>
+    </button>
+
+    <button class="btn silver btn_text paste_rdef" title="Paste Rendering Settings">
+        <span>Paste</span>
+    </button>
 
 </div>

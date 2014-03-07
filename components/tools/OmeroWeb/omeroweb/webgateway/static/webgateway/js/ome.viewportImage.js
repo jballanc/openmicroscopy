@@ -390,7 +390,7 @@ jQuery.fn.viewportImage = function(options) {
         return viewerBean;
     };
     
-    this.setUpTiles = function (imagewidth, imageheight, xtilesize, ytilesize, init_zoom, levels, href, thref, init_cx, init_cy, zoomLevelScaling) {
+    this.setUpTiles = function (imagewidth, imageheight, xtilesize, ytilesize, init_zoom, levels, hrefProvider, thref, init_cx, init_cy, zoomLevelScaling) {
         InfoControl.prototype.viewerZoomed = function(e) {
             if (this.dom_info) {
                 var scale = e.scale * 100;
@@ -405,6 +405,7 @@ jQuery.fn.viewportImage = function(options) {
                 imagewidth, imageheight, xtilesize, ytilesize, levels);
         var myProvider = new PanoJS.TileUrlProvider('','','');
         myProvider.assembleUrl = function(xIndex, yIndex, zoom) {
+            var href = hrefProvider();
             return href+'&'+myPyramid.tile_filename( zoom, xIndex, yIndex );
             //return MY_URL + '/' + MY_PREFIX + myPyramid.tile_filename( zoom, xIndex, yIndex );
         };
@@ -415,9 +416,8 @@ jQuery.fn.viewportImage = function(options) {
         
         if (viewerBean == null) {
             $('<div id="weblitz-viewport-tiles" class="viewer" style="width: 100%; height: 100%;" ></div>').appendTo(wrapdiv);
-            jQuery('#weblitz-viewport-tiles').css({width: wrapwidth, height: wrapheight});
             
-            PanoJS.CREATE_CONTROL_MAXIMIZE = false;
+            PanoJS.CREATE_CONTROL_MAXIMIZE = true;
             PanoJS.PRE_CACHE_AMOUNT = 2;
             viewerBean = new PanoJS('weblitz-viewport-tiles', {
                 tileUrlProvider : myProvider,
@@ -440,6 +440,13 @@ jQuery.fn.viewportImage = function(options) {
                     return false;
                 }
                 var coords = this.resolveCoordinates(e);
+                if (e.type=='mouseout' &&
+                    coords.x > 0 && coords.x < this.width &&
+                    coords.y > 0 && coords.y < this.height) {
+                    // on IE the mouseout event is triggered for every tile boundary,
+                    // so make sure we have really crossed the viewport boudary
+                    return false;
+                }
                 var motion = {
                     'x' : (coords.x - this.mark.x),
                     'y' : (coords.y - this.mark.y)
@@ -509,6 +516,13 @@ jQuery.fn.viewportImage = function(options) {
         }
         cur_zoom = viewerBean.zoomLevel;
     };
+
+    // Simply causes all tiles to refresh their src
+    this.refreshTiles = function () {
+        if (viewerBean) {
+            viewerBean.positionTiles();
+        }
+    };
     
     this.destroyTiles = function () {
         jQuery('#weblitz-viewport-tiles').remove();
@@ -525,7 +539,6 @@ jQuery.fn.viewportImage = function(options) {
       //orig_height = image.get(0).clientHeight;
       
       if (viewerBean != null) {
-          jQuery('#weblitz-viewport-tiles').css({width: wrapwidth, height: wrapheight});
           viewerBean.resize();
       }
       

@@ -2,10 +2,10 @@
  * org.openmicroscopy.shoola.agents.treeviewer.browser.BrowserComponent
  *
  *------------------------------------------------------------------------------
- *  Copyright (C) 2006-2013 University of Dundee. All rights reserved.
+ *  Copyright (C) 2006-2014 University of Dundee. All rights reserved.
  *
  *
- * 	This program is free software; you can redistribute it and/or modify
+ *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation; either version 2 of the License, or
  *  (at your option) any later version.
@@ -70,7 +70,6 @@ import org.openmicroscopy.shoola.agents.util.browser.TreeImageSet;
 import org.openmicroscopy.shoola.agents.util.browser.TreeImageTimeSet;
 import org.openmicroscopy.shoola.agents.util.browser.TreeViewerTranslator;
 import org.openmicroscopy.shoola.agents.util.dnd.DnDTree;
-import org.openmicroscopy.shoola.env.LookupNames;
 import org.openmicroscopy.shoola.env.data.FSAccessException;
 import org.openmicroscopy.shoola.env.data.FSFileSystemView;
 import org.openmicroscopy.shoola.env.data.util.SecurityContext;
@@ -1202,8 +1201,10 @@ class BrowserComponent
 			throw new IllegalArgumentException("Experimenter cannot be null.");
 		if (model.getBrowserType() == ADMIN_EXPLORER) return;
 		TreeImageDisplay node = model.getLastSelectedDisplay();
+		boolean reload = false;
 		if (model.isSingleGroup()) {
 			node = view.getTreeRoot();
+			reload = node.getChildCount() == 0;
 		} else {
 			//Find the group
 			ExperimenterVisitor v = new ExperimenterVisitor(this, groupID);
@@ -1222,6 +1223,7 @@ class BrowserComponent
 		if (visitor.getFoundNodes().size() > 0) return;
 		setSelectedDisplay(null);
 		view.addExperimenter(experimenter, node);
+		if (reload) view.reloadNode(node);
 	}
 
 	/**
@@ -1731,27 +1733,47 @@ class BrowserComponent
 	public void refreshAdmin(Object data)
 	{
 		if (model.getState() == DISCARDED) return;
-		if (model.getBrowserType() == ADMIN_EXPLORER) {
+		if (model.getBrowserType() == ADMIN_EXPLORER && model.isSelected()) {
 			//visit the browser
 			TreeImageDisplay node = model.getLastSelectedDisplay();
 			refreshBrowser();
 			setSelectedDisplay(node, true);
-		} else {
-			if (data instanceof ExperimenterData) {
-				ExperimenterData exp = (ExperimenterData) data;
-				ExperimenterVisitor v = new ExperimenterVisitor(this,
-						exp.getId(), -1);
-				accept(v, TreeImageDisplayVisitor.TREEIMAGE_SET_ONLY);
-				List<TreeImageDisplay> l = v.getNodes();
-				Iterator<TreeImageDisplay> i = l.iterator();
-				TreeImageDisplay n;
-				while (i.hasNext()) {
-					n = i.next();
-					n.setUserObject(model.getUserDetails());
-					view.reloadNode(n);
-				}
-			}
+			return;
 		}
+		if (data instanceof ExperimenterData || data instanceof GroupData) {
+            ExperimenterVisitor v;
+            GroupData g = null;
+            if (data instanceof ExperimenterData) {
+                ExperimenterData exp = (ExperimenterData) data;
+                v = new ExperimenterVisitor(this, exp.getId(), -1);
+            } else {
+                g = (GroupData) data;
+                v = new ExperimenterVisitor(this, g.getId());
+            }
+            accept(v, TreeImageDisplayVisitor.TREEIMAGE_SET_ONLY);
+            List<TreeImageDisplay> l = v.getNodes();
+            Iterator<TreeImageDisplay> i = l.iterator();
+            TreeImageDisplay n;
+            if (data instanceof ExperimenterData) {
+                while (i.hasNext()) {
+                    n = i.next();
+                    n.setUserObject(model.getUserDetails());
+                    view.reloadNode(n);
+                }
+            } else {
+                while (i.hasNext()) {
+                    n = i.next();
+                    n.setUserObject(g);
+                    view.reloadNode(n);
+                    l = n.getChildrenDisplay();
+                    i = l.iterator();
+                    while (i.hasNext()) {
+                        n = i.next();
+                        if (n.isExpanded()) view.expandNode(n);
+                    }
+                }
+            }
+        }
 	}
 
 	/**
@@ -2285,7 +2307,6 @@ class BrowserComponent
 	{
 		if (model.getBrowserType() == Browser.ADMIN_EXPLORER)
 			return;
-		int mode = model.getDisplayMode();
 		model.setSelectedDisplay(null, true);
 		//view.changeDisplayMode();
 		ExperimenterVisitor v = new ExperimenterVisitor(this, -1);
@@ -2295,21 +2316,13 @@ class BrowserComponent
 		//Check the group already display
 		//Was in group mode
 		view.clear();
-		List<GroupData> groups = new ArrayList<GroupData>(
-				nodes.size());
+		List<GroupData> groups = new ArrayList<GroupData>(nodes.size());
 		Iterator<TreeImageDisplay> i = nodes.iterator();
 		while (i.hasNext()) {
-			groups.add((GroupData) i.next().getUserObject());	
+			groups.add((GroupData) i.next().getUserObject());
 		}
-		switch (mode) {
-			case LookupNames.EXPERIMENTER_DISPLAY:
-				//Check if the user is in more than one group
-				if (model.isSingleGroup()) view.reActivate();
-				else view.setUserGroup(groups);
-			break;
-			case LookupNames.GROUP_DISPLAY:
-				view.setUserGroup(groups);
-		}
+		if (model.isSingleGroup()) view.reActivate();
+        else view.setUserGroup(groups);
 	}
 	
 }

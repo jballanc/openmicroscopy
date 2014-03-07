@@ -20,6 +20,7 @@ import javax.xml.transform.TransformerException;
 
 import loci.common.services.DependencyException;
 import loci.common.services.ServiceException;
+import loci.common.xml.XMLTools;
 import loci.formats.FormatTools;
 import loci.formats.IFormatWriter;
 import loci.formats.ImageWriter;
@@ -28,6 +29,7 @@ import loci.formats.meta.IMetadata;
 import loci.formats.meta.MetadataRetrieve;
 import loci.formats.out.OMETiffWriter;
 import loci.formats.services.OMEXMLService;
+import loci.formats.tiff.IFD;
 import ome.api.RawPixelsStore;
 import ome.conditions.ApiUsageException;
 import ome.conditions.InternalException;
@@ -42,7 +44,6 @@ import ome.services.formats.OmeroReader;
 import ome.services.util.Executor;
 import ome.system.ServiceFactory;
 import ome.util.messages.InternalMessage;
-import ome.scifio.xml.XMLTools;
 import ome.xml.model.OME;
 import ome.xml.model.OMEModel;
 import ome.xml.model.OMEModelImpl;
@@ -410,7 +411,13 @@ public class ExporterI extends AbstractCloseableAmdServant implements
                                         planeCount, i);
                                     int readerIndex = reader.getIndex(zct[0], zct[1], zct[2]);
                                     reader.openBytes(readerIndex, plane);
-                                    writer.saveBytes(i, plane);
+
+
+                                    IFD ifd = new IFD();
+                                    ifd.put(IFD.TILE_WIDTH, 128);
+                                    ifd.put(IFD.TILE_LENGTH, 128);
+
+                                    writer.saveBytes(i, plane, ifd);
                                 }
                                 retrieve = null;
 

@@ -73,13 +73,14 @@ def configure_server_logging(props):
     """
     program_name = props.getProperty("Ice.Admin.ServerId")
     # Using Ice.ProgramName on Windows failed
+    log_dir = props.getPropertyWithDefault("omero.logging.directory", LOGDIR)
     log_name = program_name+".log"
     log_timed = props.getPropertyWithDefault("omero.logging.timedlog","False")[0] in ('T', 't')
     log_num = int(props.getPropertyWithDefault("omero.logging.lognum",str(LOGNUM)))
     log_size = int(props.getPropertyWithDefault("omero.logging.logsize",str(LOGSIZE)))
     log_num = int(props.getPropertyWithDefault("omero.logging.lognum",str(LOGNUM)))
     log_level = int(props.getPropertyWithDefault("omero.logging.level",str(LOGLEVEL)))
-    configure_logging(LOGDIR, log_name, loglevel=log_level, maxBytes=log_size, backupCount=log_num, time_rollover = log_timed)
+    configure_logging(log_dir, log_name, loglevel=log_level, maxBytes=log_size, backupCount=log_num, time_rollover = log_timed)
 
     sys.stdout = StreamRedirect(logging.getLogger("stdout"))
     sys.stderr = StreamRedirect(logging.getLogger("stderr"))
@@ -242,6 +243,26 @@ def long_to_path(id, root=""):
             suffix = os.path.join("Dir-%03d" % dirno, suffix)
 
     return os.path.join(root, "%s%s" %(suffix,id))
+
+
+def load_dotted_class(dotted_class):
+    """
+    Load a Python class of the form "pkg.mod.Class"
+    via __import__ and return it. No ctor or similar
+    is called.
+    """
+    try:
+        parts = dotted_class.split(".")
+        pkg = ".".join(parts[0:-2])
+        mod = str(parts[-2])
+        kls = parts[-1]
+        got = __import__(pkg, fromlist=[mod])
+        got = getattr(got, mod)
+        return getattr(got, kls)
+    except Exception, e:
+        raise Exception("""Failed to load: %s
+        previous excetion: %s""" % (dotted_class, e))
+
 
 class ServerContext(object):
     """

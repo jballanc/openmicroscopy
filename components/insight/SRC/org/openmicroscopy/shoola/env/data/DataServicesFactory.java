@@ -2,10 +2,10 @@
  * org.openmicroscopy.shoola.env.data.DataServicesFactory
  *
  *------------------------------------------------------------------------------
- *  Copyright (C) 2006 University of Dundee. All rights reserved.
+ *  Copyright (C) 2006-2013 University of Dundee. All rights reserved.
  *
  *
- * 	This program is free software; you can redistribute it and/or modify
+ *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
  *  the Free Software Foundation; either version 2 of the License, or
  *  (at your option) any later version.
@@ -39,6 +39,7 @@ import java.util.Set;
 import java.util.Map.Entry;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.JDialog;
 import javax.swing.JFrame;
@@ -47,7 +48,6 @@ import javax.swing.JFrame;
 
 //Application-internal dependencies
 import omero.client;
-
 import org.openmicroscopy.shoola.env.Agent;
 import org.openmicroscopy.shoola.env.Container;
 import org.openmicroscopy.shoola.env.Environment;
@@ -67,7 +67,6 @@ import org.openmicroscopy.shoola.env.log.LogMessage;
 import org.openmicroscopy.shoola.env.log.Logger;
 import org.openmicroscopy.shoola.env.rnd.PixelsServicesFactory;
 import org.openmicroscopy.shoola.env.rnd.RenderingControl;
-import org.openmicroscopy.shoola.env.ui.AbstractIconManager;
 import org.openmicroscopy.shoola.env.ui.UserNotifier;
 import org.openmicroscopy.shoola.svc.proxy.ProxyUtil;
 import org.openmicroscopy.shoola.util.ui.IconManager;
@@ -159,6 +158,9 @@ public class DataServicesFactory
     /** The fs properties. */
     private Properties 					fsConfig;
 
+    /** Flag indicating that we try to re-establish the connection.*/
+    private final AtomicBoolean reconnecting = new AtomicBoolean(false);
+
     /**
 	 * Reads in the specified file as a property object.
 	 * 
@@ -195,14 +197,8 @@ public class DataServicesFactory
 	{
 		registry = c.getRegistry();
 		container = c;
-		
-        OMEROInfo omeroInfo = (OMEROInfo) registry.lookup(LookupNames.OMERODS);
-        
-		//Try and read the Ice config file.
-		//Properties config = loadConfig(c.resolveConfigFile(ICE_CONFIG_FILE));
-		
 		//Check what to do if null.
-        omeroGateway = new OMEROGateway(omeroInfo.getPortSSL(), this);
+        omeroGateway = new OMEROGateway(this);
         
 		//Create the adapters.
         ds = new OmeroDataServiceImpl(omeroGateway, registry);
@@ -347,58 +343,134 @@ public class DataServicesFactory
     	return (UserCredentials) 
     		registry.lookup(LookupNames.USER_CREDENTIALS);
     }
-    
+
     /**
-     * Brings up a notification dialog.
+     * Returns the time before each network check.
      * 
-     * @param title     The dialog title.
-     * @param message   The dialog message.
+     * @return See above.
      */
-    private void showNotificationDialog(String title, String message)
+    Integer getElapseTime()
     {
-    	showNotificationDialog(title, message, false);
+        return (Integer) registry.lookup(LookupNames.ELAPSE_TIME);
     }
+
     /**
-     * Brings up a notification dialog.
-     * 
-     * @param title     The dialog title.
-     * @param message   The dialog message.
-     * @param shutdown Pass <code>true</code> to shut down the application
-     * <code>false otherwise</code>
+     * Adds a listener to the dialog and shows the dialog depending on the
+     * specified value.
      */
-    private void showNotificationDialog(String title, String message, boolean
-    		shutdown)
+    private void addListenerAndShow()
     {
-    	JFrame f = new JFrame();
-    	f.setIconImage(AbstractIconManager.getOMEImageIcon());
-    	
-    	if (shutdown) {
-    		connectionDialog = new ShutDownDialog(f, title, message);
-    	} else
-    		connectionDialog = new NotificationDialog(f, title, message, null);
-        //connectionDialog.setModal(false);
+        if (connectionDialog instanceof ShutDownDialog) {
+            ShutDownDialog d = (ShutDownDialog) connectionDialog;
+            d.setChecker(omeroGateway.getChecker());
+            d.setCheckupTime(5);
+        }
+        connectionDialog.setModal(false);
         connectionDialog.addPropertyChangeListener(new PropertyChangeListener()
         {
-
-			public void propertyChange(PropertyChangeEvent evt) {
-				String name = evt.getPropertyName();
-				if (NotificationDialog.CLOSE_NOTIFICATION_PROPERTY.equals(name))
-				{
-					connectionDialog = null;
-					exitApplication(true, true);
-				} else if (
-					NotificationDialog.CANCEL_NOTIFICATION_PROPERTY.equals(
-							name))
-				{
-					connectionDialog = null;
-					omeroGateway.resetNetwork();
-				}
-			}
-		});
+            public void propertyChange(PropertyChangeEvent evt) {
+                String name = evt.getPropertyName();
+                if (NotificationDialog.CLOSE_NOTIFICATION_PROPERTY.equals(name))
+                {
+                    reconnecting.set(false);
+                    connectionDialog = null;
+                    exitApplication(true, true);
+                } else if (
+                    NotificationDialog.CANCEL_NOTIFICATION_PROPERTY.equals(
+                            name))
+                {
+                    connectionDialog = null;
+                    reconnecting.set(false);
+                    omeroGateway.resetNetwork();
+                    int index = (Integer) evt.getNewValue();
+                    if (index == ConnectionExceptionHandler.LOST_CONNECTION)
+                        reconnect();
+                }
+            }
+        });
+        connectionDialog.setModal(true);
         UIUtilities.centerAndShow(connectionDialog);
     }
-    
-	/** 
+
+    /** Attempts to reconnect.*/
+    private void reconnect()
+    {
+        JFrame f = registry.getTaskBar().getFrame();
+        String message;
+        Map<SecurityContext, Set<Long>> l =
+                omeroGateway.getRenderingEngines();
+        boolean b = omeroGateway.joinSession();
+        if (b) {
+            //reactivate the rendering engine. Need to review that
+            Iterator<Entry<SecurityContext, Set<Long>>> i =
+                    l.entrySet().iterator();
+            OmeroImageService svc = registry.getImageService();
+            Long id;
+            Entry<SecurityContext, Set<Long>> entry;
+            Map<SecurityContext, List<Long>> 
+            failures = new HashMap<SecurityContext, List<Long>>();
+            Iterator<Long> j;
+            SecurityContext ctx;
+            List<Long> failure;
+            RenderingControl p;
+            while (i.hasNext()) {
+                entry = i.next();
+                j = entry.getValue().iterator();
+                ctx = entry.getKey();
+                while (j.hasNext()) {
+                    id = j.next();
+                    try {
+                        p = PixelsServicesFactory.getRenderingControl(
+                                registry, Long.valueOf(id), false);
+                        if (!p.isShutDown()) {
+                            registry.getLogger().debug(this,
+                                    "loading re "+id);
+                            svc.reloadRenderingService(ctx, id);
+                        }
+                    } catch (Exception e) {
+                        failure = failures.get(ctx);
+                        if (failure == null) {
+                            failure = new ArrayList<Long>();
+                            failures.put(ctx, failure);
+                        }
+                        registry.getLogger().debug(this,
+                                "Failed to load re for "+id+" "+e);
+                        failure.add(id);
+                    }
+                }
+            }
+            if (failures.size() > 0) {
+                registry.getEventBus().post(
+                        new ReloadRenderingEngine(failures));
+            }
+            connectionDialog.setVisible(false);
+            connectionDialog.dispose();
+            connectionDialog = null;
+            reconnecting.set(false);
+        } else {
+            //connectionDialog.setVisible(false);
+            message = "A failure occurred while attempting to " +
+                    "reconnect.\nThe application will now exit.";
+            connectionDialog = new NotificationDialog(f,
+                    "Reconnection Failure", message, null);
+            addListenerAndShow();
+        }
+    }
+
+    /**
+     * Returns the value of the plug-in or <code>-1</code>.
+     * 
+     * @return See above.
+     */
+    int runAsPlugin()
+    {
+        Integer v = (Integer) container.getRegistry().lookup(
+                LookupNames.PLUGIN);
+        if (v == null) return -1;
+        return v.intValue();
+    }
+
+	/**
 	 * Brings up a dialog indicating that the session has expired and
 	 * quits the application.
 	 * 
@@ -407,7 +479,8 @@ public class DataServicesFactory
 	 */
 	public void sessionExpiredExit(int index, Throwable exc)
 	{
-		if (connectionDialog != null || !omeroGateway.isConnected()) return;
+	    if (reconnecting.get()) return;
+		reconnecting.set(true);
 		String message;
 		if (exc != null) {
 			LogMessage msg = new LogMessage();
@@ -415,79 +488,36 @@ public class DataServicesFactory
 			msg.print(exc);
 			registry.getLogger().debug(this, msg);
 		}
+		JFrame f = registry.getTaskBar().getFrame();
 		switch (index) {
 			case ConnectionExceptionHandler.DESTROYED_CONNECTION:
 				message = "The connection has been destroyed." +
 						"\nThe application will now exit.";
-				showNotificationDialog("Connection Refused", message);
+				connectionDialog = new NotificationDialog(f,
+				        "Connection Refused", message, null);
+				addListenerAndShow();
 				break;
 			case ConnectionExceptionHandler.NETWORK:
 				message = "The network is down.\n";
-				showNotificationDialog("Network", message, true);
+				connectionDialog = new ShutDownDialog(f, "Network down",
+				        message, -1);
+				addListenerAndShow();
 				break;
 			case ConnectionExceptionHandler.LOST_CONNECTION:
-				UserCredentials uc = (UserCredentials) 
-				registry.lookup(LookupNames.USER_CREDENTIALS);
-				Map<SecurityContext, Set<Long>> l =
-						omeroGateway.getRenderingEngines();
-				boolean b =  omeroGateway.reconnect(uc.getUserName(), 
-						uc.getPassword());
-				connectionDialog = null;
-				if (b) {
-					//reactivate the rendering engine. Need to review that
-					Iterator<Entry<SecurityContext, Set<Long>>> i =
-							l.entrySet().iterator();
-					OmeroImageService svc = registry.getImageService();
-					Long id;
-					Entry<SecurityContext, Set<Long>> entry;
-					Map<SecurityContext, List<Long>> 
-					failure = new HashMap<SecurityContext, List<Long>>();
-					Iterator<Long> j;
-					SecurityContext ctx;
-					List<Long> f;
-					RenderingControl p;
-					while (i.hasNext()) {
-						entry = i.next();
-						j = entry.getValue().iterator();
-						ctx = entry.getKey();
-						while (j.hasNext()) {
-							id = j.next();
-							try {
-								p = PixelsServicesFactory.getRenderingControl(
-										registry, Long.valueOf(id), false);
-								if (!p.isShutDown())
-									svc.reloadRenderingService(ctx, id);
-							} catch (Exception e) {
-								f = failure.get(ctx);
-								if (f == null) {
-									f = new ArrayList<Long>();
-									failure.put(ctx, f);
-								}
-								f.add(id);
-							}
-						}
-					}
-					message = "You are reconnected to the server.";
-					if (failure.size() > 0) {
-						//notify user.
-						registry.getEventBus().post(
-								new ReloadRenderingEngine(failure));
-					}
-				} else {
-					message = "A failure occurred while attempting to " +
-							"reconnect.\nThe application will now exit.";
-					showNotificationDialog("Reconnection Failure", message);
-				}
-				//}
+			    connectionDialog = new ShutDownDialog(f, "Lost connection",
+                        "Trying to reconnect...", index);
+			    addListenerAndShow();
 				break;
 			case ConnectionExceptionHandler.SERVER_OUT_OF_SERVICE:
 				message = "The server is no longer " +
-				"running. \nPlease contact your system administrator." +
+				"running.\nPlease contact your system administrator." +
 				"\nThe application will now exit.";
-				showNotificationDialog("Connection Refused", message);
+				connectionDialog = new NotificationDialog(f,
+				        "Connection Refused", message, null);
+				addListenerAndShow();
 		}
 	}
-	
+
     /**
      * Returns the {@link OmeroDataService}.
      * 
@@ -546,15 +576,16 @@ public class DataServicesFactory
 	public void connect(UserCredentials uc)
 		throws DSOutOfServiceException
 	{
+	    
 		if (uc == null)
             throw new NullPointerException("No user credentials.");
-		omeroGateway.setPort(uc.getPort());
 		String name = (String) 
 		 container.getRegistry().lookup(LookupNames.MASTER);
 		if (name == null) name = LookupNames.MASTER_INSIGHT;
-		client client = omeroGateway.createSession(uc.getUserName(), 
-				uc.getPassword(), uc.getHostName(), uc.isEncrypted(), name);
-		if (client == null) {
+		client client = omeroGateway.createSession(uc.getUserName(),
+				uc.getPassword(), uc.getHostName(), uc.isEncrypted(), name,
+				uc.getPort());
+		if (client == null || singleton == null) {
 			omeroGateway.logout();
         	return;
 		}
@@ -583,7 +614,7 @@ public class DataServicesFactory
         
         ExperimenterData exp = omeroGateway.login(client, uc.getUserName(), 
         		uc.getHostName(), determineCompression(uc.getSpeedLevel()),
-        		uc.getGroup());
+        		uc.getGroup(), uc.getPort());
         //Post an event to indicate that the user is connected.
         EventBus bus = container.getRegistry().getEventBus();
         bus.post(new ConnectedEvent());
@@ -616,23 +647,34 @@ public class DataServicesFactory
         Set<GroupData> available;
         List<ExperimenterData> exps = new ArrayList<ExperimenterData>();
         try {
-        	SecurityContext ctx = new SecurityContext(
-        			exp.getDefaultGroup().getId());
+            GroupData defaultGroup = null;
+            long gid = exp.getDefaultGroup().getId();
+        	SecurityContext ctx = new SecurityContext(gid);
         	groups = omeroGateway.getAvailableGroups(ctx, exp);
+        	registry.bind(LookupNames.SYSTEM_ROLES,
+                    omeroGateway.getSystemRoles(ctx));
         	//Check if the current experimenter is an administrator 
         	Iterator<GroupData> i = groups.iterator();
         	GroupData g;
         	available = new HashSet<GroupData>();
         	while (i.hasNext()) {
         		g = i.next();
-        		if (!omeroGateway.isSystemGroup(g.asGroup())) {
+        		if (gid == g.getId()) defaultGroup = g;
+        		if (!admin.isSecuritySystemGroup(g.getId())) {
         			available.add(g);
         		} else {
-        			if (GroupData.SYSTEM.equals(g.getName())) {
+        			if (admin.isSecuritySystemGroup(g.getId(),
+        			        GroupData.SYSTEM)) {
         				available.add(g);
         				uc.setAdministrator(true);
         			}
         		}
+        	}
+        	//to be on the safe side.
+        	if (available.size() ==  0) {
+        	    //group with loaded users.
+        	    if (defaultGroup != null) available.add(defaultGroup);
+        	    else available.add(exp.getDefaultGroup());
         	}
         	registry.bind(LookupNames.USER_GROUP_DETAILS, available);
         	List<Long> ids = new ArrayList<Long>();
@@ -652,7 +694,7 @@ public class DataServicesFactory
         			}
         		}
         	}
-        	registry.bind(LookupNames.USERS_DETAILS, exps);	
+        	registry.bind(LookupNames.USERS_DETAILS, exps);
         	registry.bind(LookupNames.USER_ADMINISTRATOR, uc.isAdministrator());
 		} catch (DSAccessException e) {
 			throw new DSOutOfServiceException("Cannot retrieve groups", e);
@@ -705,13 +747,15 @@ public class DataServicesFactory
 	public void shutdown(SecurityContext ctx)
     { 
 		//Need to write the current group.
-		if (!omeroGateway.isConnected()) return;
+		//if (!omeroGateway.isConnected()) return;
 		omeroGateway.logout();
 		DataServicesFactory.registry.getCacheService().clearAllCaches();
 		PixelsServicesFactory.shutDownRenderingControls(container.getRegistry());
 		 
         if (executor != null) executor.shutdown();
+        singleton = null;
         executor = null;
+        omeroGateway = null;
     }
 	
 	/** Shuts the services down and exits the application.
@@ -771,9 +815,9 @@ public class DataServicesFactory
 			}
 		}
 		shutdown(null);
+		singleton = null;
 		if (exit) {
 			CacheServiceFactory.shutdown(container);
-			singleton = null;
 			container.exit();
 		}
 	}

@@ -2,7 +2,7 @@
  * ome.services.blitz.repo.PublicRepositoryI
  *
  *------------------------------------------------------------------------------
- *  Copyright (C) 2006-2013 University of Dundee. All rights reserved.
+ *  Copyright (C) 2006-2014 University of Dundee. All rights reserved.
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -22,12 +22,14 @@
  *
  *
  */
+
 package ome.services.blitz.repo;
 
 import java.io.File;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -55,8 +57,6 @@ import ome.api.IQuery;
 import ome.api.RawFileStore;
 import ome.formats.importer.ImportConfig;
 import ome.formats.importer.OMEROWrapper;
-import ome.model.annotations.FileAnnotation;
-import ome.model.annotations.FilesetAnnotationLink;
 import ome.services.blitz.impl.AbstractAmdServant;
 import ome.services.blitz.impl.ServiceFactoryI;
 import ome.services.blitz.repo.path.FilePathRestrictionInstance;
@@ -72,6 +72,7 @@ import ome.services.util.Executor;
 import ome.system.OmeroContext;
 import ome.system.Principal;
 import ome.system.ServiceFactory;
+import ome.util.SqlAction;
 import ome.util.checksum.ChecksumProviderFactory;
 import ome.util.messages.InternalMessage;
 
@@ -98,7 +99,6 @@ import omero.grid._RepositoryOperations;
 import omero.grid._RepositoryTie;
 import omero.model.ChecksumAlgorithm;
 import omero.model.OriginalFile;
-import omero.model.OriginalFileI;
 import omero.model.enums.ChecksumAlgorithmSHA1160;
 import omero.util.IceMapper;
 
@@ -137,7 +137,10 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
     /**
      * Mimetype used to connote a directory {@link OriginalFile} object.
      */
-    public static String DIRECTORY_MIMETYPE = "Directory";
+    public static final String DIRECTORY_MIMETYPE = "Directory";
+
+    /** media type for import logs */
+    public static final String IMPORT_LOG_MIMETYPE = "application/omero-log-file";
 
     private /*final*/ long id;
 
@@ -473,13 +476,13 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
         }
 
     /**
-     * Should be refactored elsewhere.
-     * @param checkedPath 
-     * @param current
+     * Set the repository of the given original file to be this one.
+     * TODO: Should be refactored elsewhere.
+     * @param originalFileId the ID of the log file
+     * @param current the Ice method invocation context
      */
     @Deprecated
-    protected OriginalFile registerLogFile(final String repoUuid, final long filesetId,
-            final CheckedPath checkedPath, Ice.Current current)
+    protected ome.model.core.OriginalFile persistLogFile(final ome.model.core.OriginalFile originalFile, Ice.Current current)
                 throws ServerError {
 
         final Executor executor = this.context.getBean("executor", Executor.class);
@@ -487,35 +490,17 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
         final String session = ctx.get(omero.constants.SESSIONUUID.value);
         final String group = ctx.get(omero.constants.GROUP.value);
         final Principal principal = new Principal(session, group, null);
-        final String LOG_FILE_NS =
-                omero.constants.namespaces.NSLOGFILE.value;
 
         try {
-            FilesetAnnotationLink link = (FilesetAnnotationLink)
-                    executor.execute(ctx, principal, new Executor.SimpleWork(this, "setOriginalFileHasherToSHA1", id) {
+            return (ome.model.core.OriginalFile) executor.execute(ctx, principal,
+                    new Executor.SimpleWork(this, "persistLogFile", id) {
                 @Transactional(readOnly = false)
-                public Object doWork(Session session, ServiceFactory sf) {
-
-                    ome.model.core.OriginalFile logFile = null;
-                    try {
-                         logFile = repositoryDao.register(repoUuid,
-                            checkedPath, "text/plain", sf, getSqlAction());
-                    } catch (ServerError se) {
-                        throw new RuntimeException("Failed to register log file", se);
-                    }
-
-                    // use sf to get the services to link Fileset and the OriginalFile
-                    ome.api.IUpdate iUpdate = sf.getUpdateService();
-                    ome.model.annotations.FileAnnotation fa = new ome.model.annotations.FileAnnotation();
-                    fa.setNs(LOG_FILE_NS);
-                    fa.setFile(logFile.proxy());
-                    FilesetAnnotationLink fsl = new FilesetAnnotationLink();
-                    fsl.link(new ome.model.fs.Fileset(filesetId, false), fa);
-                    return iUpdate.saveAndReturnObject(fsl);
+                public ome.model.core.OriginalFile doWork(Session session, ServiceFactory sf) {
+                    final ome.model.core.OriginalFile persisted = sf.getUpdateService().saveAndReturnObject(originalFile);
+                    getSqlAction().setFileRepo(persisted.getId(), repoUuid);
+                    return persisted;
                 }
             });
-            FileAnnotation fs = (FileAnnotation) link.child();
-            return new OriginalFileI(fs.getFile().getId(), false);
         } catch (Exception e) {
             throw (ServerError) new IceMapper().handleException(e, executor.getContext());
         }
@@ -621,7 +606,8 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
             AbstractAmdServant servant, Ice.Current current)
                     throws ServerError {
 
-        final RegisterServantMessage msg = new RegisterServantMessage(this, tie, current);
+        final RegisterServantMessage msg = new RegisterServantMessage(this, tie,
+                servant.getClass().getSimpleName(), current);
         publishMessage(msg);
         Ice.ObjectPrx prx = msg.getProxy();
         if (prx == null) {
@@ -680,6 +666,11 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
      */
     public void makeDir(String path, boolean parents, Current __current) throws ServerError {
         CheckedPath checked = checkPath(path, null, __current);
+        repositoryDao.makeDirs(this, Arrays.asList(checked), parents, __current);
+    }
+
+    public void makeDir(CheckedPath checked, boolean parents,
+            Session s, ServiceFactory sf, SqlAction sql) throws ServerError {
 
         final LinkedList<CheckedPath> paths = new LinkedList<CheckedPath>();
         while (!checked.isRoot) {
@@ -699,7 +690,7 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
             }
         }
 
-        makeCheckedDirs(paths, parents, __current);
+        makeCheckedDirs(paths, parents, s, sf, sql);
 
     }
 
@@ -713,7 +704,8 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
      * @param __current
      */
     protected void makeCheckedDirs(final LinkedList<CheckedPath> paths,
-            boolean parents, Current __current) throws ResourceError,
+            boolean parents, Session s, ServiceFactory sf, SqlAction sql)
+                    throws ResourceError,
             ServerError {
 
         CheckedPath checked;
@@ -733,12 +725,12 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
                     throw new omero.ResourceError(null, null,
                             "Directory is not readable");
                 }
-                assertFindDir(checked, __current);
+                assertFindDir(checked, s, sf, sql);
 
             } else {
                 // This will fail if the file already exists in
                 repositoryDao.register(repoUuid, checked,
-                        DIRECTORY_MIMETYPE, __current);
+                        DIRECTORY_MIMETYPE, sf, sql);
             }
 
         }
@@ -747,14 +739,14 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
         checked = paths.removeFirst(); // Size is now empty
         if (checked.exists()) {
             if (parents) {
-                assertFindDir(checked, __current);
+                assertFindDir(checked, s, sf, sql);
             } else {
                 throw new omero.ResourceError(null, null,
                     "Path exists on disk: " + checked.fsFile);
             }
         }
         repositoryDao.register(repoUuid, checked,
-                DIRECTORY_MIMETYPE, __current);
+                DIRECTORY_MIMETYPE, sf, sql);
     }
 
     //
@@ -794,22 +786,27 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
      */
     private CheckedPath checkId(final long id, final Ice.Current curr)
         throws SecurityViolation, ValidationException {
+        // TODO: could getOriginalFile and getFile be reduced to a single call?
         final FsFile file = this.repositoryDao.getFile(id, curr, this.repoUuid);
         if (file == null) {
             throw new SecurityViolation(null, null, "FileNotFound: " + id);
         }
-
-        // TODO: could getOriginalFile and getFile be reduced to a single call?
-        final ChecksumAlgorithm checksumAlgorithm = this.repositoryDao.getOriginalFile(id, curr).getHasher();
+        final OriginalFile originalFile = this.repositoryDao.getOriginalFile(id, curr);
+        if (originalFile == null) {
+            /* reachable even if file != null because getFile uses SQL,
+             * evading the filter on the HQL used here by getOriginalFile */
+            throw new SecurityViolation(null, null, "FileNotAccessible: " + id);
+        }
         final CheckedPath checked = new CheckedPath(this.serverPaths,file.toString(),
-                checksumProviderFactory, checksumAlgorithm);
+                checksumProviderFactory, originalFile.getHasher());
         checked.setId(id);
         return checked;
     }
 
-    private void assertFindDir(final CheckedPath checked, final Ice.Current curr)
+    private void assertFindDir(final CheckedPath checked,
+            Session s, ServiceFactory sf, SqlAction sql)
         throws omero.ServerError {
-        if (null == repositoryDao.findRepoFile(repoUuid, checked, null, curr)) {
+        if (null == repositoryDao.findRepoFile(sf, sql, repoUuid, checked, null)) {
             omero.ResourceError re = new omero.ResourceError();
             IceMapper.fillServerError(re, new RuntimeException(
                     "Directory exists but is not registered: " + checked));

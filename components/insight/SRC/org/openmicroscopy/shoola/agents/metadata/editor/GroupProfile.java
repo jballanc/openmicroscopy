@@ -121,24 +121,7 @@ class GroupProfile
     	permissionsPane.addPropertyChangeListener(this);
     	namePane.setText(ref.getName());
     	descriptionPane.setText(ref.getDescription());
-    	GroupData group = (GroupData) model.getRefObject();
-    	ExperimenterData exp = MetadataViewerAgent.getUserDetails();
-    	Set l = group.getLeaders();
-    	ExperimenterData leader;
-    	canEdit = false;
-    	if (l != null) {
-    		Iterator i = l.iterator();
-        	while (i.hasNext()) {
-        		leader = (ExperimenterData) i.next();
-    			if (leader.getId() == exp.getId()) {
-    				canEdit = true;
-    				break;
-    			}
-    		}
-    	}
-    	
-    	if (!canEdit) canEdit = model.isAdministrator();
-    	if (canEdit) canEdit = !ref.isSystemGroup();
+    	canEdit = model.isAdministrator() && !model.isSystemGroup(ref.getId());
     	namePane.setEditable(canEdit);
     	namePane.setEnabled(canEdit);
     	descriptionPane.setEditable(canEdit);
@@ -275,6 +258,7 @@ class GroupProfile
 			}
 			data.setName(v);
 		}
+		saveButton.setEnabled(false);
 		//check description
 		v = descriptionPane.getText();
 		v = v.trim();

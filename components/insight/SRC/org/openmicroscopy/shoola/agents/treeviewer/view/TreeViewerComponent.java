@@ -944,7 +944,7 @@ class TreeViewerComponent
 	 * 
 	 * @param imageIds The collection of updated images
 	 */
-	void onRndSettingsCopied(Collection imageIds)
+	void onRndSettingsCopied(Collection<Long> imageIds)
 	{
 		if (model.getState() == DISCARDED) return;
 		MetadataViewer mv = model.getMetadataViewer();
@@ -1766,12 +1766,11 @@ class TreeViewerComponent
 		Iterator<TreeImageDisplay> k = nodes.iterator();
 		TreeImageDisplay n;
 		ExperimenterData exp;
-		long currentUser = model.getExperimenter().getId();
 		while (k.hasNext()) {
 			n = k.next();
 			if (n.getUserObject() instanceof ExperimenterData) {
 				exp = (ExperimenterData) n.getUserObject();
-				if (!ids.contains(exp.getId()) && exp.getId() != currentUser) {
+				if (!ids.contains(exp.getId())) {
 					users.add(exp);
 				}
 			}
@@ -1803,6 +1802,11 @@ class TreeViewerComponent
 				browser = entry.getValue();
 				browser.addExperimenter(exp, userGroupID);
 			}
+		}
+		//clean display if 
+		if (users.size() > 0) {
+		      DataBrowserFactory.discardAll();
+		        view.removeAllFromWorkingPane();
 		}
 	}
 
@@ -1981,10 +1985,11 @@ class TreeViewerComponent
 		setStatus(false, "", true);
 		view.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
 		model.setState(READY);
-		if (objects == null || objects.size() == 0)
+		if (CollectionUtils.isEmpty(objects))
 			return;
 		Browser b = model.getSelectedBrowser();
 		List<Object> available = new ArrayList<Object>();
+		List<Object> immutable = new ArrayList<Object>();
 		Set selected = null;
 		if (b != null) {
 			TreeImageDisplay[] values = b.getSelectedDisplays();
@@ -1993,18 +1998,29 @@ class TreeViewerComponent
 				Object value = values[0].getUserObject();
 				if (value instanceof GroupData) {
 					long groupId = ((GroupData) value).getId();
-					long currentUserId = TreeViewerAgent.getUserDetails().getId();
+					ExperimenterData currentUser = model.getExperimenter();
 					selected = new HashSet<ExperimenterData>();
+					long userID = currentUser.getId();
+					long id;
 					List<Long> ids = new ArrayList<Long>();
 					for (ExperimenterData experimenter :
 						(List<ExperimenterData>) objects) {
-						if (experimenter.getId() != currentUserId &&
-								experimenter.isMemberOfGroup(groupId)) {
-							selected.add(experimenter);
-							ids.add(experimenter.getId());
+					    id = experimenter.getId();
+						if (experimenter.isMemberOfGroup(groupId)) {
+						    ids.add(id);
+						    selected.add(experimenter);
+						    //Cannot move guest or root
+						    if ((model.isSystemUser(id, GroupData.GUEST) &&
+						       model.isSystemGroup(groupId, GroupData.GUEST))) {
+						        immutable.add(experimenter);
+						    } else if (model.isSystemGroup(groupId, GroupData.SYSTEM)) {
+						        if (model.isSystemUser(id, GroupData.SYSTEM) ||
+						                id == userID) {
+						            immutable.add(experimenter);
+						        }
+						    }
 						}
-						if (!ids.contains(experimenter.getId()) &&
-								experimenter.getId() != currentUserId) {
+						if (!ids.contains(experimenter.getId())) {
 							available.add(experimenter);
 						}
 					}
@@ -2016,6 +2032,7 @@ class TreeViewerComponent
 		fireStateChange();
 		SelectionWizard d = new SelectionWizard(view, available, selected,
 				objects.get(0).getClass(), TreeViewerAgent.getUserDetails());
+		d.setImmutableElements(immutable);
 		IconManager icons = IconManager.getInstance();
 		String title = "User Selection";
 		String text = "Select the Users who should be in the selected group.";
@@ -2470,6 +2487,8 @@ class TreeViewerComponent
 			browser = entry.getValue();
 			browser.removeExperimenter(exp, groupID);
 		}
+		DataBrowserFactory.discardAll();
+        view.removeAllFromWorkingPane();
 	}
 
 	/**
@@ -2809,7 +2828,7 @@ class TreeViewerComponent
 		//Need to notify the browser without having 
 		List l = (List) object;
 		int n = l.size();
-		if (n > 3) return;
+		if (n > 3 || n <= 1) return;
 		Object multiSelection = l.get(0);
 		Object selected = l.get(1);
 		Object parent = null;
@@ -2828,6 +2847,7 @@ class TreeViewerComponent
 		}
 
 		Browser browser = model.getSelectedBrowser();
+		if (browser == null) return;
 		browser.onDeselectedNode(parent, selected, (Boolean) multiSelection);
 		onSelectedDisplay();
 	}
@@ -3223,9 +3243,8 @@ class TreeViewerComponent
 						if (db == null) return;
 						db.addPropertyChangeListener(controller);
 						db.setDisplayMode(model.getDisplayMode());
-						db.activate();
 						view.displayBrowser(db);
-						//db.activate();
+						db.activate();
 						model.setDataViewer(db);
 						browser.setSelectedDisplay(node);
 					}
@@ -4284,167 +4303,209 @@ class TreeViewerComponent
 	 * @see TreeViewer#transfer(TreeImageDisplay, List, int)
 	 */
 	public void transfer(TreeImageDisplay target, List<TreeImageDisplay> nodes,
-			int transferAction)
+	        int transferAction)
 	{
-		if (target == null || nodes == null || nodes.size() == 0) return;
-		Browser browser = model.getSelectedBrowser();
-		if (browser == null) return;
-		Object ot = target.getUserObject();
-		Object os;
-		if (nodes.size() == 1) { //check if src = destination
-			TreeImageDisplay src = nodes.get(0);
-			if (src == target) {
-				browser.rejectTransfer();
-				return;
-			}
-		}
-		UserNotifier un = TreeViewerAgent.getRegistry().getUserNotifier();
-		if (browser.getBrowserType() == Browser.ADMIN_EXPLORER) {
-			if (!(ot instanceof GroupData) ||
-					!TreeViewerAgent.isAdministrator()) {
-				un.notifyInfo("DnD", "Only administrator can perform" +
-						"such action.");
-				browser.rejectTransfer();
-				return;
-			}
-		}
-		if (!canLink(ot) && !(ot instanceof ExperimenterData ||
-				ot instanceof GroupData)) {
-			un.notifyInfo("DnD", 
-					"You must be the owner of the container.");
-			browser.rejectTransfer();
-			return;
-		}
-		TreeImageDisplay p = target.getParentDisplay();
-		List<TreeImageDisplay> list = new ArrayList<TreeImageDisplay>();
-		Iterator<TreeImageDisplay> i = nodes.iterator();
-		TreeImageDisplay n;
-		
-		int count = 0;
-		String child;
-		String parent;
-		os = null;
-		int childCount = 0;
-		long userID = TreeViewerAgent.getUserDetails().getId();
-		boolean administrator = TreeViewerAgent.isAdministrator();
-		ExperimenterData exp;
-		long gId;
-		List<Long> groupIds = new ArrayList<Long>();
-		DataObject data;
-		while (i.hasNext()) {
-			n = i.next();
-			os = n.getUserObject();
-			if (target.contains(n)) {
-				childCount++;
-			} else {
-				if (EditorUtil.isTransferable(ot, os, userID)) {
-					count++;
-					if (ot instanceof GroupData) {
-						if (os instanceof ExperimenterData &&
-								administrator) {
-							list.add(n);
-						} else {
-							if (canEdit(os)) {
-								data = (DataObject) os;
-								if (!groupIds.contains(data.getGroupId()))
-									groupIds.add(data.getGroupId());
-								list.add(n);
-							}
-						}
-					} else {
-						if (ot instanceof ExperimenterData) {
-							exp = (ExperimenterData) ot;
-							if (exp.getId() == userID) {
-								target = null;
-								list.add(n);
-							}
-						} else {
-							if (canEdit(os)) {
-								list.add(n);
-								data = (DataObject) os;
-								if (!groupIds.contains(data.getGroupId()))
-									groupIds.add(data.getGroupId());
-							}
-						}
-					}
-				}
-			}
-		}
-		if (childCount == nodes.size()) {
-			browser.rejectTransfer();
-			return;
-		}
-		
-		
-		if (list.size() == 0) {
-			String s = "";
-			if (nodes.size() > 1) s = "s";
-			un.notifyInfo("DnD", 
-			"The "+getObjectType(os)+s+" cannot be moved to the selected "+
-				getObjectType(ot)+".");
-			browser.rejectTransfer();
-			return;
-		}
-		DataObject otData = (DataObject) ot;
-		GroupData group = null;
-		if (ot instanceof ExperimenterData) {
-			Object po = p.getUserObject();
-			if (po instanceof GroupData) group = (GroupData) po;
-		} else {
-			group = new GroupData();
-			group.setId(otData.getGroupId());
-		}
-		//to review
-		if (browser.getBrowserType() == Browser.ADMIN_EXPLORER)
-			model.transfer(target, list);
-		else if (groupIds.size() == 1 && groupIds.get(0) == group.getId())
-			model.transfer(target, list);
-		else {
-			if (group == null) return;
-			
-			
-			MessageBox box = new MessageBox(view, "Change group", "Are you " +
-				"sure you want to move the selected items to another group?");
-			if (box.centerMsgBox() != MessageBox.YES_OPTION) return;
-			otData = null;
-			if (target != null && !(ot instanceof GroupData)) {
-				otData = (DataObject) ot;
-			}
-			
-			Map<Long, List<DataObject>> elements = 
-				new HashMap<Long, List<DataObject>>();
-			i = list.iterator();
-			long gid;
-			List<DataObject> l;
-			while (i.hasNext()) {
-				n = i.next();
-				os = n.getUserObject();
-				if (os instanceof DataObject &&
-					!(os instanceof ExperimenterData ||
-						os instanceof GroupData)) {
-					gid = ((DataObject) os).getGroupId();
-					if (!elements.containsKey(gid)) {
-						elements.put(gid, new ArrayList<DataObject>());
-					}
-					l = elements.get(gid);
-					l.add((DataObject) os);
-				}
-			}
-			if (elements.size() == 0) return;
-			Iterator<Long> j = elements.keySet().iterator();
-			Map<SecurityContext, List<DataObject>> trans = 
-				new HashMap<SecurityContext, List<DataObject>>();
-			while (j.hasNext()) {
-				gid = j.next();
-				trans.put(new SecurityContext(gid), elements.get(gid));
-			}
-			if (target == null) otData = null;
-			ChgrpObject object = new ChgrpObject(group, otData, trans);
-			model.fireImageChecking(trans, object, ImageCheckerType.CHGRP);
-		}
+	    if (target == null || CollectionUtils.isEmpty(nodes)) return;
+	    Browser browser = model.getSelectedBrowser();
+	    if (browser == null) return;
+	    Object ot = target.getUserObject();
+	    Object os;
+	    if (nodes.size() == 1) { //check if src = destination
+	        TreeImageDisplay src = nodes.get(0);
+	        if (src == target) {
+	            browser.rejectTransfer();
+	            return;
+	        }
+	    }
+	    UserNotifier un = TreeViewerAgent.getRegistry().getUserNotifier();
+	    if (browser.getBrowserType() == Browser.ADMIN_EXPLORER) {
+	        if (!(ot instanceof GroupData) ||
+	                !TreeViewerAgent.isAdministrator()) {
+	            un.notifyInfo("DnD", "Only administrator can perform" +
+	                    "such action.");
+	            browser.rejectTransfer();
+	            return;
+	        }
+	        //Check the source
+	        Iterator<TreeImageDisplay> i = nodes.iterator();
+	        TreeImageDisplay n;
+	        ExperimenterData exp;
+	        long id = model.getUserDetails().getId();
+	        TreeImageDisplay p;
+	        GroupData g;
+	        String message = null;
+	        while (i.hasNext()) {
+	            n = i.next();
+	            if (n.getUserObject() instanceof ExperimenterData) {
+	                exp = (ExperimenterData) n.getUserObject();
+	                p = n.getParentDisplay();
+	                if (p != null && p.getUserObject() instanceof GroupData) {
+	                    g = (GroupData) p.getUserObject();
+	                    if (model.isSystemGroup(g.getId(),
+	                            GroupData.SYSTEM)) {
+	                        if (exp.getId() == id) {
+	                            message = "An administrator cannot remove " +
+	                                    "himself/herself from "+g.getName()+
+	                                    " Group.";
+	                            break;
+	                        } else if (model.isSystemUser(exp.getId(),
+	                                GroupData.SYSTEM)) {
+	                            message = "An administrator cannot remove " +
+                                        exp.getUserName()+" from "+g.getName()
+                                        +" Group.";
+                                break;
+	                        }
+	                    } else if (model.isSystemGroup(g.getId(),
+	                            GroupData.GUEST) &&
+	                            model.isSystemUser(exp.getId(),
+	                                    GroupData.GUEST)) {
+	                        message = "An administrator cannot remove " +
+                                    exp.getUserName()+" from "+g.getName()+
+                                    " Group.";
+	                        break;
+	                    }
+	                }
+	            }
+	        }
+	        if (message != null) {
+	            un.notifyInfo("DnD", message);
+	            browser.rejectTransfer();
+	            return;
+	        }
+	    }
+	    if (!canLink(ot) && !(ot instanceof ExperimenterData ||
+	            ot instanceof GroupData)) {
+	        un.notifyInfo("DnD", 
+	                "You must be the owner of the container.");
+	        browser.rejectTransfer();
+	        return;
+	    }
+	    TreeImageDisplay p = target.getParentDisplay();
+	    List<TreeImageDisplay> list = new ArrayList<TreeImageDisplay>();
+	    Iterator<TreeImageDisplay> i = nodes.iterator();
+	    TreeImageDisplay n;
+
+	    int count = 0;
+	    String child;
+	    String parent;
+	    os = null;
+	    int childCount = 0;
+	    long userID = TreeViewerAgent.getUserDetails().getId();
+	    boolean administrator = TreeViewerAgent.isAdministrator();
+	    ExperimenterData exp;
+	    long gId;
+	    List<Long> groupIds = new ArrayList<Long>();
+	    DataObject data;
+	    while (i.hasNext()) {
+	        n = i.next();
+	        os = n.getUserObject();
+	        if (target.contains(n)) {
+	            childCount++;
+	        } else {
+	            if (EditorUtil.isTransferable(ot, os, userID)) {
+	                count++;
+	                if (ot instanceof GroupData) {
+	                    if (os instanceof ExperimenterData &&
+	                            administrator) {
+	                        list.add(n);
+	                    } else {
+	                        if (canEdit(os)) {
+	                            data = (DataObject) os;
+	                            if (!groupIds.contains(data.getGroupId()))
+	                                groupIds.add(data.getGroupId());
+	                            list.add(n);
+	                        }
+	                    }
+	                } else {
+	                    if (ot instanceof ExperimenterData) {
+	                        exp = (ExperimenterData) ot;
+	                        if (exp.getId() == userID) {
+	                            target = null;
+	                            list.add(n);
+	                        }
+	                    } else {
+	                        if (canEdit(os)) {
+	                            list.add(n);
+	                            data = (DataObject) os;
+	                            if (!groupIds.contains(data.getGroupId()))
+	                                groupIds.add(data.getGroupId());
+	                        }
+	                    }
+	                }
+	            }
+	        }
+	    }
+	    if (childCount == nodes.size()) {
+	        browser.rejectTransfer();
+	        return;
+	    }
+
+	    if (list.size() == 0) {
+	        String s = "";
+	        if (nodes.size() > 1) s = "s";
+	        un.notifyInfo("DnD", 
+	                "The "+getObjectType(os)+s+" cannot be moved to the " +
+	                        "selected "+getObjectType(ot)+".");
+	        browser.rejectTransfer();
+	        return;
+	    }
+	    DataObject otData = (DataObject) ot;
+	    GroupData group = null;
+	    if (ot instanceof ExperimenterData) {
+	        Object po = p.getUserObject();
+	        if (po instanceof GroupData) group = (GroupData) po;
+	    } else {
+	        group = new GroupData();
+	        group.setId(otData.getGroupId());
+	    }
+	    //to review
+	    if (browser.getBrowserType() == Browser.ADMIN_EXPLORER)
+	        model.transfer(target, list);
+	    else if (groupIds.size() == 1 && groupIds.get(0) == group.getId())
+	        model.transfer(target, list);
+	    else {
+	        if (group == null) return;
+	        MessageBox box = new MessageBox(view, "Change group", "Are you " +
+	                "sure you want to move the selected items to another group?");
+	        if (box.centerMsgBox() != MessageBox.YES_OPTION) return;
+	        otData = null;
+	        if (target != null && !(ot instanceof GroupData)) {
+	            otData = (DataObject) ot;
+	        }
+
+	        Map<Long, List<DataObject>> elements =
+	                new HashMap<Long, List<DataObject>>();
+	        i = list.iterator();
+	        long gid;
+	        List<DataObject> l;
+	        while (i.hasNext()) {
+	            n = i.next();
+	            os = n.getUserObject();
+	            if (os instanceof DataObject &&
+	                    !(os instanceof ExperimenterData ||
+	                            os instanceof GroupData)) {
+	                gid = ((DataObject) os).getGroupId();
+	                if (!elements.containsKey(gid)) {
+	                    elements.put(gid, new ArrayList<DataObject>());
+	                }
+	                l = elements.get(gid);
+	                l.add((DataObject) os);
+	            }
+	        }
+	        if (elements.size() == 0) return;
+	        Iterator<Long> j = elements.keySet().iterator();
+	        Map<SecurityContext, List<DataObject>> trans = 
+	                new HashMap<SecurityContext, List<DataObject>>();
+	        while (j.hasNext()) {
+	            gid = j.next();
+	            trans.put(new SecurityContext(gid), elements.get(gid));
+	        }
+	        if (target == null) otData = null;
+	        ChgrpObject object = new ChgrpObject(group, otData, trans);
+	        model.fireImageChecking(trans, object, ImageCheckerType.CHGRP);
+	    }
 	}
 
-	
 	/** 
 	 * Implemented as specified by the {@link TreeViewer} interface.
 	 * @see TreeViewer#getSelectedGroup()
@@ -4491,8 +4552,6 @@ class TreeViewerComponent
 		browser.accept(v, ExperimenterVisitor.TREEIMAGE_SET_ONLY);
 		//do not remove the last group.
 		List<TreeImageDisplay> groups = v.getNodes();
-		if (groups.size() == 1 && 
-			model.getDisplayMode() == TreeViewer.EXPERIMENTER_DISPLAY) return;
 		//Find the node
 		Iterator<TreeImageDisplay> j = groups.iterator();
 		TreeImageDisplay n;
@@ -4527,6 +4586,8 @@ class TreeViewerComponent
 				break;
 			}
 		}
+		DataBrowserFactory.discardAll();
+        view.removeAllFromWorkingPane();
 	}
 
 	/** 
@@ -4707,4 +4768,30 @@ class TreeViewerComponent
 		}
 	}
 
+    /** 
+     * Implemented as specified by the {@link TreeViewer} interface.
+     * @see TreeViewer#isSystemUser(long)
+     */
+    public boolean isSystemUser(long userID)
+    {
+        return model.isSystemUser(userID);
+    }
+
+    /** 
+     * Implemented as specified by the {@link TreeViewer} interface.
+     * @see TreeViewer#isSystemUser(long, String)
+     */
+    public boolean isSystemUser(long userID, String key)
+    {
+        return model.isSystemUser(userID, key);
+    }
+    
+    /** 
+     * Implemented as specified by the {@link TreeViewer} interface.
+     * @see TreeViewer#isSystemGroup(long, String)
+     */
+    public boolean isSystemGroup(long groupID, String key)
+    {
+        return model.isSystemGroup(groupID, key);
+    }
 }

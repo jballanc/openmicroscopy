@@ -1,31 +1,40 @@
 /*
- * ome.formats.importer.ImportLibrary
+ * Copyright (C) 2005-2014 University of Dundee & Open Microscopy Environment.
+ * All rights reserved.
  *
- *------------------------------------------------------------------------------
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  Copyright (C) 2005-2013 Open Microscopy Environment
- *      Massachusetts Institute of Technology,
- *      National Institutes of Health,
- *      University of Dundee
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *
- *------------------------------------------------------------------------------
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
 package ome.formats.importer;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
+import loci.common.Location;
 import loci.formats.FormatException;
 import loci.formats.FormatReader;
 import ome.formats.OMEROMetadataStoreClient;
+import ome.formats.importer.transfers.FileTransfer;
+import ome.formats.importer.transfers.TransferState;
+import ome.formats.importer.transfers.UploadFileTransfer;
 import ome.formats.importer.util.ErrorHandler;
 import ome.formats.importer.util.ProportionalTimeEstimatorImpl;
 import ome.formats.importer.util.TimeEstimator;
@@ -37,6 +46,7 @@ import ome.services.blitz.util.ChecksumAlgorithmMapper;
 import ome.util.checksum.ChecksumProvider;
 import ome.util.checksum.ChecksumProviderFactory;
 import ome.util.checksum.ChecksumProviderFactoryImpl;
+import ome.util.checksum.ChecksumType;
 import omero.ChecksumValidationException;
 import omero.ServerError;
 import omero.api.IMetadataPrx;
@@ -55,20 +65,20 @@ import omero.grid.ManagedRepositoryPrx;
 import omero.grid.ManagedRepositoryPrxHelper;
 import omero.grid.RepositoryMap;
 import omero.grid.RepositoryPrx;
-import omero.model.Annotation;
+import omero.model.ChecksumAlgorithm;
 import omero.model.Dataset;
-import omero.model.FileAnnotation;
-import omero.model.FileAnnotationI;
 import omero.model.Fileset;
 import omero.model.FilesetI;
+import omero.model.IObject;
 import omero.model.OriginalFile;
 import omero.model.Pixels;
 import omero.model.Screen;
-import omero.sys.Parameters;
-import omero.sys.ParametersI;
 
+import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.ImmutableList;
 
 import Ice.Current;
 
@@ -78,7 +88,6 @@ import Ice.Current;
  * ImportHandler to support ImportFixture
  *
  * @author Josh Moore, josh.moore at gmx.de
- * @version $Revision: 1167 $, $Date: 2006-12-15 10:39:34 +0000 (Fri, 15 Dec 2006) $
  * @see FormatReader
  * @see OMEROMetadataStoreClient
  * @see ImportFixture
@@ -99,6 +108,9 @@ public class ImportLibrary implements IObservable
     /* checksum provider factory for verifying file integrity in upload */
     private static final ChecksumProviderFactory checksumProviderFactory = new ChecksumProviderFactoryImpl();
 
+    /* the checksum algorithms available from the checksum provider factory */
+    private static final ImmutableList<ChecksumAlgorithm> availableChecksumAlgorithms;
+
     private final ArrayList<IObserver> observers = new ArrayList<IObserver>();
 
     private final OMEROMetadataStoreClient store;
@@ -106,6 +118,19 @@ public class ImportLibrary implements IObservable
     private final ManagedRepositoryPrx repo;
 
     private final ServiceFactoryPrx sf;
+
+    /**
+     * Method used for transferring files to the server.
+     */
+    private final FileTransfer transfer;
+
+    /**
+     * Minutes to wait for an import to take place. If 0 is set, then no waiting
+     * will take place and an empty list of objects will be returned. If negative,
+     * then the process will loop indefinitely (default). Otherwise, the given
+     * number of minutes will be waited until throwing a {@link LockTimeout}.
+     */
+    private final int minutesToWait;
 
     /**
      * Adapter for use with any callbacks created by the library.
@@ -117,14 +142,52 @@ public class ImportLibrary implements IObservable
      */
     private final String category;
 
+    static {
+        final Set<ChecksumType> availableTypes = checksumProviderFactory.getAvailableTypes();
+        final ImmutableList.Builder<ChecksumAlgorithm> builder = ImmutableList.builder();
+        for (final ChecksumAlgorithm checksumAlgorithm : ChecksumAlgorithmMapper.getAllChecksumAlgorithms()) {
+            final ChecksumType checksumType =  ChecksumAlgorithmMapper.getChecksumType(checksumAlgorithm);
+            if (availableTypes.contains(checksumType)) {
+                builder.add(checksumAlgorithm);
+            }
+        }
+        availableChecksumAlgorithms = builder.build();
+    }
+
+    /**
+     * The default implementation of {@link FileTransfer} performs a
+     * no-op and therefore need not have
+     * {@link FileTransfer#afterTransfer(int, File[])} as with the
+     * {@link #ImportLibrary(OMEROMetadataStoreClient, OMEROWrapper, FileTransfer)}
+     * constructor.
+     *
+     * @param client
+     * @param reader
+     */
+    public ImportLibrary(OMEROMetadataStoreClient client, OMEROWrapper reader)
+    {
+        this(client, reader, new UploadFileTransfer());
+    }
+
     /**
      * The library will not close the client instance. The reader will be closed
      * between calls to import.
      *
+     * <em>Note:</em> the responsibility of closing
+     * {@link FileTransfer#afterTransfer(int, File[])} falls to invokers of this
+     * method.
+     *
      * @param store not null
      * @param reader not null
      */
-    public ImportLibrary(OMEROMetadataStoreClient client, OMEROWrapper reader)
+    public ImportLibrary(OMEROMetadataStoreClient client, OMEROWrapper reader,
+            FileTransfer transfer)
+    {
+        this(client, reader, transfer, -1);
+    }
+
+    public ImportLibrary(OMEROMetadataStoreClient client, OMEROWrapper reader,
+            FileTransfer transfer, int minutesToWait)
     {
         if (client == null || reader == null)
         {
@@ -133,6 +196,8 @@ public class ImportLibrary implements IObservable
         }
 
         this.store = client;
+        this.transfer = transfer;
+        this.minutesToWait = minutesToWait;
         repo = lookupManagedRepository();
         // Adapter which should be used for callbacks. This is more
         // complicated than it needs to be at the moment. We're only sure that
@@ -197,6 +262,10 @@ public class ImportLibrary implements IObservable
                             Screen.class, config.targetId.get()));
                 }
 
+                if (config.checksumAlgorithm.get() != null) {
+                    ic.setChecksumAlgorithm(config.checksumAlgorithm.get());
+                }
+
                 try {
                     importImage(ic,index,numDone,containers.size());
                     numDone++;
@@ -247,6 +316,9 @@ public class ImportLibrary implements IObservable
             }
         }
 
+        notifyObservers(new ImportEvent.FILESET_UPLOAD_PREPARATION(
+                null, 0, usedFiles.length, null, null, null));
+
         // TODO: allow looser sanitization according to server configuration
         final FilePathRestrictions portableRequiredRules =
                 FilePathRestrictionInstance.getFilePathRestrictions(FilePathRestrictionInstance.WINDOWS_REQUIRED,
@@ -254,12 +326,20 @@ public class ImportLibrary implements IObservable
         final ClientFilePathTransformer sanitizer = new ClientFilePathTransformer(new MakePathComponentSafe(portableRequiredRules));
 
         final ImportSettings settings = new ImportSettings();
-        // TODO: here or on container.fillData, we need to
-        // check if the container object has ChecksumAlgorithm
-        // present and pass it into the settings object
         final Fileset fs = new FilesetI();
-        container.fillData(new ImportConfig(), settings, fs, sanitizer);
-        settings.checksumAlgorithm = repo.suggestChecksumAlgorithm(repo.listChecksumAlgorithms());
+        container.fillData(new ImportConfig(), settings, fs, sanitizer, transfer);
+
+        String caStr = container.getChecksumAlgorithm();
+        if (caStr != null) {
+            settings.checksumAlgorithm = ChecksumAlgorithmMapper.getChecksumAlgorithm(caStr);
+        } else {
+            // check if the container object has ChecksumAlgorithm
+            // present and pass it into the settings object
+            settings.checksumAlgorithm = repo.suggestChecksumAlgorithm(availableChecksumAlgorithms);
+            if (settings.checksumAlgorithm == null) {
+                throw new RuntimeException("no supported checksum algorithm negotiated with server");
+            }
+        }
         return repo.importFileset(fs, settings);
     }
 
@@ -315,104 +395,41 @@ public class ImportLibrary implements IObservable
             final ChecksumProviderFactory cpf, TimeEstimator estimator,
             final byte[] buf)
             throws ServerError, IOException {
-        estimator.start();
-        ChecksumProvider cp = cpf.getProvider(
+
+        final ChecksumProvider cp = cpf.getProvider(
                 ChecksumAlgorithmMapper.getChecksumType(
                         proc.getImportSettings().checksumAlgorithm));
-        String digestString = null;
-        File file = new File(srcFiles[index]);
-        long length = file.length();
-        FileInputStream stream = null;
-        RawFileStorePrx rawFileStore = null;
+
+        final File file = new File(Location.getMappedId(srcFiles[index]));
+
         try {
-            stream = new FileInputStream(file);
-            rawFileStore = proc.getUploader(index);
-            int rlen = 0;
-            long offset = 0;
-
-            notifyObservers(new ImportEvent.FILE_UPLOAD_STARTED(
-                    file.getAbsolutePath(), index, srcFiles.length,
-                    null, length, null));
-
-            // "touch" the file otherwise zero-length files
-            rawFileStore.write(new byte[0], offset, 0);
-            estimator.stop();
-            notifyObservers(new ImportEvent.FILE_UPLOAD_BYTES(
-                    file.getAbsolutePath(), index, srcFiles.length,
-                    offset, length, estimator.getUploadTimeLeft(), null));
-
-            while (true) {
-                estimator.start();
-                rlen = stream.read(buf);
-                if (rlen == -1) {
-                    break;
-                }
-                cp.putBytes(buf, 0, rlen);
-                rawFileStore.write(buf, offset, rlen);
-                offset += rlen;
-                estimator.stop(rlen);
-                notifyObservers(new ImportEvent.FILE_UPLOAD_BYTES(
-                        file.getAbsolutePath(), index, srcFiles.length, offset,
-                        length, estimator.getUploadTimeLeft(), null));
-            }
-            estimator.start();
-            digestString = cp.checksumAsString();
-
-            OriginalFile ofile = rawFileStore.save();
-            if (log.isDebugEnabled()) {
-                log.debug(String.format("%s/%s id=%s",
-                        ofile.getPath().getValue(),
-                        ofile.getName().getValue(),
-                        ofile.getId().getValue()));
-                log.debug(String.format("checksums: client=%s,server=%s",
-                        digestString, ofile.getHash().getValue()));
-            }
-            estimator.stop();
-            notifyObservers(new ImportEvent.FILE_UPLOAD_COMPLETE(
-                    file.getAbsolutePath(), index, srcFiles.length,
-                    offset, length, null));
-
+            return transfer.transfer(new TransferState(
+                    file, index, srcFiles.length,
+                    proc, this, estimator, cp, buf));
         }
-        catch (IOException e) {
+        catch (Exception e) {
+            // Required to bump the error count
+            notifyObservers(new ErrorHandler.FILE_EXCEPTION(
+                    file.getAbsolutePath(), e, srcFiles, "unknown"));
+            // The state that we're entering, i.e. exiting upload via error
             notifyObservers(new ImportEvent.FILE_UPLOAD_ERROR(
                     file.getAbsolutePath(), index, srcFiles.length,
                     null, null, e));
-            throw e;
-        }
-        catch (ServerError e) {
-            notifyObservers(new ImportEvent.FILE_UPLOAD_ERROR(
-                    file.getAbsolutePath(), index, srcFiles.length,
-                    null, null, e));
-            throw e;
-        }
-        finally {
-            cleanupUpload(rawFileStore, stream);
-        }
-
-        return digestString;
-    }
-
-    private void cleanupUpload(RawFileStorePrx rawFileStore,
-            FileInputStream stream) throws ServerError {
-        try {
-            if (rawFileStore != null) {
-                try {
-                    rawFileStore.close();
-                } catch (Exception e) {
-                    log.error("error in closing raw file store", e);
-                }
-            }
-        } finally {
-            if (stream != null) {
-                try {
-                    stream.close();
-                } catch (IOException e) {
-                    log.error("I/O in error closing stream", e);
-                }
+            if (e instanceof RuntimeException) {
+                throw (RuntimeException) e;
+            } else if (e instanceof ServerError) {
+                throw (ServerError) e;
+            } else if (e instanceof IOException) {
+                throw (IOException) e;
+            } else {
+                String msg = "Unexpected exception thrown!";
+                log.error(msg, e);
+                throw new RuntimeException(msg, e);
             }
         }
 
     }
+
 
     /**
      * Perform an image import uploading files if necessary.
@@ -436,8 +453,8 @@ public class ImportLibrary implements IObservable
                                     int numDone, int total)
             throws FormatException, IOException, Throwable
     {
+        HandlePrx handle;
         final ImportProcessPrx proc = createImport(container);
-        final HandlePrx handle;
         final String[] srcFiles = container.getUsedFiles();
         final List<String> checksums = new ArrayList<String>();
         final byte[] buf = new byte[store.getDefaultBlockSize()];
@@ -466,10 +483,40 @@ public class ImportLibrary implements IObservable
 
         // At this point the import is running, check handle for number of
         // steps.
-        final ImportCallback cb = createCallback(proc, handle, container);
-        cb.loop(60*60, 1000); // Wait 1 hr per step.
-        final ImportResponse rsp = cb.getImportResponse();
-        return rsp.pixels;
+        ImportCallback cb = null;
+        try {
+            cb = createCallback(proc, handle, container);
+
+            if (minutesToWait == 0) {
+                log.info("Disconnecting from import process...");
+                cb.close(false);
+                cb = null;
+                handle = null;
+                return Collections.emptyList(); // EARLY EXIT
+            }
+
+            if (minutesToWait < 0) {
+                while (true) {
+                    if (cb.block(5000)) {
+                        break;
+                    }
+                }
+            } else {
+                cb.loop(minutesToWait * 30, 2000);
+            }
+
+            final ImportResponse rsp = cb.getImportResponse();
+            if (rsp == null) {
+                throw new Exception("Import failure");
+            }
+            return rsp.pixels;
+        } finally {
+            if (cb != null) {
+                cb.close(true); // Allow cb to close handle
+            } else if (handle != null) {
+                handle.close();
+            }
+        }
     }
 
     public ImportCallback createCallback(ImportProcessPrx proc,
@@ -503,29 +550,24 @@ public class ImportLibrary implements IObservable
             final ImportRequest req = (ImportRequest) handle.getRequest();
             final Long fsId = req.activity.getParent().getId().getValue();
             final IMetadataPrx metadataService = sf.getMetadataService();
-            final List<String> nsToInclude = new ArrayList<String>(
-                    Arrays.asList(omero.constants.namespaces.NSLOGFILE.value));
-            final List<String> nsToExclude = new ArrayList<String>();
-            final List<Long> rootIds = new ArrayList<Long>(Arrays.asList(fsId));
-            final Parameters param = new ParametersI();
-            Map<Long,List<Annotation>> annotationMap = new HashMap<Long,List<Annotation>>();
-            List<Annotation> annotations = new ArrayList<Annotation>();
-            Long ofId = null;
+            final List<Long> rootIds = Collections.singletonList(fsId);
             try {
-                annotationMap = metadataService.loadSpecifiedAnnotationsLinkedTo(
-                        FileAnnotation.class.getName(), nsToInclude, nsToExclude,
-                        Fileset.class.getName(), rootIds, param);
-                if (annotationMap.containsKey(fsId)) {
-                    annotations = annotationMap.get(fsId);
-                    if (annotations.size() != 0) {
-                        FileAnnotation fa = (FileAnnotationI) annotations.get(0);
-                        ofId = fa.getFile().getId().getValue();
+                final Map<Long, List<IObject>> logMap = metadataService.loadLogFiles(Fileset.class.getName(), rootIds);
+                final List<IObject> logs = logMap.get(fsId);
+                if (CollectionUtils.isNotEmpty(logs)) {
+                    for (final IObject log : logs) {
+                        if (log instanceof OriginalFile) {
+                            final Long ofId = log.getId().getValue();
+                            if (ofId != null) {
+                                return ofId;
+                            }
+                        }
                     }
                 }
             } catch (ServerError e) {
-                ofId = null;
+                log.debug("failed to load log file", e);
             }
-            return ofId;
+            return null;
         }
 
         @Override
@@ -618,7 +660,7 @@ public class ImportLibrary implements IObservable
      * repositories.
      * @return Active proxy for the legacy repository.
      */
-    private ManagedRepositoryPrx lookupManagedRepository()
+    public ManagedRepositoryPrx lookupManagedRepository()
     {
         try
         {
@@ -653,10 +695,28 @@ public class ImportLibrary implements IObservable
     {
         try {
             store.setGroup(null);
-            store.setCurrentLogFile(null);
+            store.setCurrentLogFile(null, null);
             store.createRoot();
         } catch (Throwable t) {
             log.error("failed to clear metadata store", t);
         }
+    }
+
+    /**
+     * Use {@link RawFileStorePrx#getFileId()} in order to load the
+     * {@link OriginalFile} that the service argument is acting on.
+     *
+     * @param uploader not null
+     * @return
+     * @throws ServerError
+     */
+    public OriginalFile loadOriginalFile(RawFileStorePrx uploader)
+            throws ServerError {
+        omero.RLong rid = uploader.getFileId();
+        long id = rid.getValue();
+        Map<String, String> ctx = new HashMap<String, String>();
+        ctx.put("omero.group", "-1");
+        return (OriginalFile)
+                sf.getQueryService().get("OriginalFile", id, ctx);
     }
 }

@@ -3,7 +3,7 @@
 """
    Plugin for our configuring the OMERO.web installation
 
-   Copyright 2009 University of Dundee. All rights reserved.
+   Copyright 2009-2013 University of Dundee. All rights reserved.
    Use is subject to license terms supplied in LICENSE.txt
 
 """
@@ -70,6 +70,7 @@ class WebControl(BaseControl):
 
         parser.add(sub, self.start, "Primary start for the OMERO.web server")
         parser.add(sub, self.stop, "Stop the OMERO.web server")
+        parser.add(sub, self.restart, "Restart the OMERO.web server")
         parser.add(sub, self.status, "Status for the OMERO.web server")
 
         iis = parser.add(sub, self.iis, "IIS (un-)install of OMERO.web ")
@@ -82,7 +83,7 @@ class WebControl(BaseControl):
         config = parser.add(
             sub, self.config,
             "Output a config template for server"
-            " ('nginx' or 'apache' for the moment")
+            " ('nginx' or 'apache' for the moment)")
         config.add_argument("type", choices=("nginx", "apache"))
         config.add_argument(
             "--http", type=int,
@@ -93,8 +94,8 @@ class WebControl(BaseControl):
 
         parser.add(
             sub, self.syncmedia,
-            "[DEPRECATED] Advanced use: Creates needed symlinks for static"
-            " media files")
+            "Advanced use: Creates needed symlinks for static"
+            " media files (Performed automatically by 'start')")
 
         #
         # Developer
@@ -197,6 +198,18 @@ class WebControl(BaseControl):
                     "HTTPPORT": port,
                     "FASTCGI_PASS": fastcgi_pass,
                     }
+                if hasattr(settings, 'FORCE_SCRIPT_NAME') \
+                        and len(settings.FORCE_SCRIPT_NAME) > 0:
+                    d["FASTCGI_PATH_SCRIPT_INFO"] = \
+                        "fastcgi_split_path_info ^(%s)(.*)$;\n" \
+                        "            " \
+                        "fastcgi_param PATH_INFO $fastcgi_path_info;\n" \
+                        "            " \
+                        "fastcgi_param SCRIPT_INFO $fastcgi_script_name;\n" \
+                        % (settings.FORCE_SCRIPT_NAME)
+                else:
+                    d["FASTCGI_PATH_SCRIPT_INFO"] = \
+                        "fastcgi_param PATH_INFO $fastcgi_script_name;\n"
                 self.ctx.out(c % d)
             if server == "apache":
                 if settings.APPLICATION_SERVER == settings.FASTCGITCP:
@@ -224,7 +237,7 @@ class WebControl(BaseControl):
 support
 # most later versions of mod_ssl and OSes will support it
 # if you see "You should not use name-based virtual hosts in conjunction \
-with  SSL!!"
+with SSL!!"
 # or similar start apache with -D DISABLE_SNI and modify ssl.conf
 #<IfDefine !DISABLE_SNI>
 #  NameVirtualHost *:443
@@ -295,9 +308,7 @@ Alias /omero "%(ROOT)s/var/omero.fcgi/"
                 self.ctx.out(stanza % d)
 
     def syncmedia(self, args):
-        self.ctx.out(
-            "** NO-OP ** syncmedia now part of 'web start' and is "
-            "no longer required.")
+        self.collectstatic()
 
     def enableapp(self, args):
         location = self.ctx.dir / "lib" / "python" / "omeroweb"
@@ -501,7 +512,7 @@ using bin\omero web start on Windows with FastCGI.
             rv = self.ctx.popen(args=django, cwd=location)  # popen
         else:
             django = [sys.executable, "manage.py", "runserver", link,
-                      "--noreload"]
+                      "--noreload", "--nothreading"]
             rv = self.ctx.call(django, cwd=location)
         self.ctx.out("[OK]")
         return rv
@@ -559,16 +570,24 @@ using bin\omero web start on Windows with FastCGI.
                     self.ctx.out(
                         "Django FastCGI workers (PID %s) not started?"
                         % pid_text)
-                    return
+                    return True
                 os.kill(pid, signal.SIGTERM)  # kill whole group
                 self.ctx.out("[OK]")
                 self.ctx.out("Django FastCGI workers (PID %d) killed." % pid)
+                return True
             finally:
                 if pid_path.exists():
                     pid_path.remove()
         else:
             self.ctx.err(
                 "DEVELOPMENT: You will have to kill processes by hand!")
+            return False
+
+    def restart(self, args):
+        if self.stop(args):
+            return self.start(args)
+        else:
+            return False
 
     def set_environ(self, ice_config=None):
         os.environ['ICE_CONFIG'] = ice_config is None and \

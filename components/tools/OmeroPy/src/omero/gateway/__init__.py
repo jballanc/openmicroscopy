@@ -3,7 +3,7 @@
 #
 # blitz_gateway - python bindings and wrappers to access an OMERO blitz server
 # 
-# Copyright (c) 2007, 2010 Glencoe Software, Inc. All rights reserved.
+# Copyright (c) 2007-2014 Glencoe Software, Inc. All rights reserved.
 # 
 # This software is distributed under the terms described by the LICENCE file
 # you can find at the root of the distribution bundle, which states you are
@@ -49,7 +49,7 @@ except: #pragma: nocover
     try:
         import Image, ImageDraw, ImageFont          # see ticket:2597
     except:
-        logger.error('No PIL installed, line plots and split channel will fail!')
+        logger.error('No Pillow installed, line plots and split channel will fail!')
 from cStringIO import StringIO
 from math import sqrt
 
@@ -1789,6 +1789,17 @@ class _BlitzGateway (object):
                 self._user = self.getObject("Experimenter", self._userid) or None
         return self._user
     
+    def getAdministrators(self):
+        """
+        Returns Experimenters with administration privileges.
+         
+        @return:    Current Experimenter
+        @return:     Generator of L{BlitzObjectWrapper} subclasses
+        """
+        sysGroup = self.getObject("ExperimenterGroup", self.getAdminService().getSecurityRoles().systemGroupId)
+        for gem in sysGroup.copyGroupExperimenterMap():
+            yield ExperimenterWrapper(self, gem.child)
+    
     def getGroupFromContext(self):
         """
         Returns current omero_model_ExperimenterGroupI.
@@ -3030,17 +3041,21 @@ class _BlitzGateway (object):
 
         # upload file
         fo.seek(0)
-        rawFileStore.setFileId(originalFile.getId().getValue())
-        buf = 10000
-        for pos in range(0,long(fileSize),buf):
-            block = None
-            if fileSize-pos < buf:
-                blockSize = fileSize-pos
-            else:
-                blockSize = buf
-            fo.seek(pos)
-            block = fo.read(blockSize)
-            rawFileStore.write(block, pos, blockSize)
+        try:
+            rawFileStore.setFileId(originalFile.getId().getValue())
+            buf = 10000
+            for pos in range(0,long(fileSize),buf):
+                block = None
+                if fileSize-pos < buf:
+                    blockSize = fileSize-pos
+                else:
+                    blockSize = buf
+                fo.seek(pos)
+                block = fo.read(blockSize)
+                rawFileStore.write(block, pos, blockSize)
+            originalFile = rawFileStore.save()
+        finally:
+            rawFileStore.close();
         return OriginalFileWrapper(self, originalFile)
         
     def createOriginalFileFromLocalFile (self, localPath, origFilePathAndName=None, mimetype=None, ns=None):
@@ -6115,8 +6130,9 @@ class _ImageWrapper (BlitzObjectWrapper):
             where i.id = %i
             """ % self._obj.id.val
             query = self._conn.getQueryService()
-            ds = query.findByQuery(q,None, self._conn.SERVICE_OPTS)
-            return ds and DatasetWrapper(self._conn, ds) or None
+            ds = query.findAllByQuery(q, None, self._conn.SERVICE_OPTS)
+            if ds and len(ds) == 1:
+                return DatasetWrapper(self._conn, ds[0])
         except: #pragma: no cover
             logger.debug('on getDataset')
             logger.debug(traceback.format_exc())
@@ -6137,8 +6153,9 @@ class _ImageWrapper (BlitzObjectWrapper):
             where i.id = %i
             """ % self._obj.id.val
             query = self._conn.getQueryService()
-            prj = query.findByQuery(q,None, self._conn.SERVICE_OPTS)
-            return prj and ProjectWrapper(self._conn, prj) or None
+            prj = query.findAllByQuery(q,None, self._conn.SERVICE_OPTS)
+            if prj and len(prj) == 1:
+                return ProjectWrapper(self._conn, prj[0])
         except: #pragma: no cover
             logger.debug('on getProject')
             logger.debug(traceback.format_exc())

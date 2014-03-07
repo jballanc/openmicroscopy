@@ -501,7 +501,7 @@ public interface MetadataViewer
 	 * 
 	 * @param imageIds The collection of images.
 	 */
-	void onRndSettingsCopied(Collection imageIds);
+	void onRndSettingsCopied(Collection<Long> imageIds);
 	
 	/**
 	 * Returns <code>true</code> if it is an image with a lot of channels.
@@ -589,11 +589,21 @@ public interface MetadataViewer
 	 */
 	void resetPassword(String newPass);
 	
-	/** Loads the settings associated to a given image. */
-	void loadViewedBy();
+	/**
+	 * Loads the settings associated to a given image.
+	 * 
+	 * @param source The component invoking the loading.
+	 * @param location The location of the mouse pressed.
+	 */
+	void loadViewedBy(Component source, Point location);
 	
-	/** Sets the settings linked to a given image. */
-	void setViewedBy(Map result);
+	/**
+	 * Sets the settings linked to a given image.
+	 * 
+	 * @param source The component invoking the loading.
+     * @param location The location of the mouse pressed.
+	 */
+	void setViewedBy(Map result, Component source, Point location);
 	
 	/**
 	 * Sets the thumbnails of the image currently selected.

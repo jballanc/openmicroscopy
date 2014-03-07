@@ -528,6 +528,10 @@ class OmeroImageServiceImpl
 		}
 	}
 
+	/** 
+	 * Implemented as specified by {@link OmeroImageService}.
+	 * @see OmeroImageService#isAlive(SecurityContext)
+	 */
 	public boolean isAlive(SecurityContext ctx) throws DSOutOfServiceException
 	{
 	    return null != gateway.getConnector(ctx, true, true);
@@ -660,26 +664,25 @@ class OmeroImageServiceImpl
 	}
 	
 	/** 
-	 * Implemented as specified by {@link OmeroImageService}. 
+	 * Implemented as specified by {@link OmeroImageService}.
 	 * @see OmeroImageService#reloadRenderingService(SecurityContext, long)
 	 */
 	public RenderingControl reloadRenderingService(SecurityContext ctx,
 		long pixelsID)
 		throws RenderingServiceException
 	{
-		RenderingControl proxy = 
-			PixelsServicesFactory.getRenderingControl(context, 
+		RenderingControl proxy =
+			PixelsServicesFactory.getRenderingControl(context,
 					Long.valueOf(pixelsID), false);
 		if (proxy == null) return null;
 		try {
 			int number = getNumberOfRenderingEngines(ctx, pixelsID);
 			List<RenderingEnginePrx>
 			proxies = new ArrayList<RenderingEnginePrx>(number);
-			gateway.removeREService(ctx, pixelsID);
 			for (int i = 0; i < number; i++) {
 				proxies.add(gateway.createRenderingEngine(ctx, pixelsID));
 			}
-			return PixelsServicesFactory.reloadRenderingControl(context, 
+			return PixelsServicesFactory.reloadRenderingControl(context,
 					pixelsID, proxies);
 		} catch (Exception e) {
 			throw new RenderingServiceException("Cannot restart the " +
@@ -804,8 +807,8 @@ class OmeroImageServiceImpl
 	 * Implemented as specified by {@link OmeroImageService}. 
 	 * @see OmeroImageService#getRenderingSettings(ctx, long, long)
 	 */
-	public Map getRenderingSettings(SecurityContext ctx, long pixelsID,
-		long userID) 
+	public Map<DataObject, Collection<RndProxyDef>> getRenderingSettings(
+	        SecurityContext ctx, long pixelsID, long userID) 
 		throws DSOutOfServiceException, DSAccessException
 	{
 		return gateway.getRenderingSettings(ctx, pixelsID, userID);
@@ -1175,10 +1178,12 @@ class OmeroImageServiceImpl
 					Iterator<String> i = candidates.iterator();
 					StatusLabel label;
 					int index = 0;
+					File f;
 					while (i.hasNext()) {
-						label = new StatusLabel();
+					    f = new File(i.next());
+						label = new StatusLabel(f);
 						label.setUsedFiles(containers.get(index).getUsedFiles());
-						files.put(new File(i.next()), label);
+						files.put(f, label);
 						index++;
 					}
 						
@@ -1239,7 +1244,7 @@ class OmeroImageServiceImpl
 			c = j.next();
 			hcs = c.getIsSPW();
 			f = c.getFile();
-			sl = new StatusLabel();
+			sl = new StatusLabel(f);
 			sl.setUsedFiles(c.getUsedFiles());
 			if (hcs) {
 				if (n == 1 && file.list().length > 1)
@@ -1580,7 +1585,7 @@ class OmeroImageServiceImpl
 	}
 	
 	/** 
-	 * Implemented as specified by {@link OmeroImageService}. 
+	 * Implemented as specified by {@link OmeroImageService}.
 	 * @see OmeroImageService#runScript(SecurityContext, ScriptObject)
 	 */
 	public ScriptCallback runScript(SecurityContext ctx, ScriptObject script)
@@ -1588,6 +1593,9 @@ class OmeroImageServiceImpl
 	{
 		if (script == null) 
 			throw new IllegalArgumentException("No script to run.");
+		if (!script.allRequiredValuesPopulated())
+		    throw new ProcessException("No all required parameters have been" +
+		    		" filled.");
 		return gateway.runScript(ctx, script);
 	}
 	

@@ -3,7 +3,7 @@
 # 
 # webclient_gateway
 # 
-# Copyright (c) 2008-2011 University of Dundee.
+# Copyright (c) 2008-2014 University of Dundee.
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -557,8 +557,11 @@ class OmeroWebGateway (omero.gateway.BlitzGateway):
             if len(ann) > 0:
                 ann = ann[0]
                 store = self.createRawFileStore()
-                store.setFileId(ann.file.id.val)
-                photo = store.read(0,long(ann.file.size.val))
+                try:
+                    store.setFileId(ann.file.id.val)
+                    photo = store.read(0, long(ann.file.size.val))
+                finally:
+                    store.close()
             else:
                 photo = self.getExperimenterDefaultPhoto()
         except:
@@ -588,8 +591,11 @@ class OmeroWebGateway (omero.gateway.BlitzGateway):
             else:
                 ann = meta.loadAnnotations("Experimenter", [long(oid)], None, None, None).get(long(oid), [])[0]
             store = self.createRawFileStore()
-            store.setFileId(ann.file.id.val)
-            photo = store.read(0,long(ann.file.size.val))
+            try:
+                store.setFileId(ann.file.id.val)
+                photo = store.read(0, long(ann.file.size.val))
+            finally:
+                store.close()
             try:
                 im = Image.open(StringIO(photo))
             except:
@@ -643,8 +649,11 @@ class OmeroWebGateway (omero.gateway.BlitzGateway):
             else:
                 ann = meta.loadAnnotations("Experimenter", [long(oid)], None, None, None).get(long(oid), [])[0]
             store = self.createRawFileStore()
-            store.setFileId(ann.file.id.val)
-            photo = store.read(0,long(ann.file.size.val))
+            try:
+                store.setFileId(ann.file.id.val)
+                photo = store.read(0, long(ann.file.size.val))
+            finally:
+                store.close()
         except:
             logger.error(traceback.format_exc())
             raise IOError("Photo does not exist.")
@@ -934,12 +943,15 @@ class OmeroWebGateway (omero.gateway.BlitzGateway):
     
     def setMembersOfGroup(self, group, new_members):
         """
-        Change members of the group.
+        Change members of the group. Returns a list of existing group members
+        that could not be removed from the group because it is their only group.
         
         @param group            An existing ExperimenterGroup instance.
         @type group             ExperimenterGroupI
         @param new_members      List of new new Experimenter Ids.
         @type new_members       L{Long}
+        @return                 List of Experimenters not removed from group
+        @rtype                  List of L{ExperimenterWrapper}
         """
         
         experimenters = list(self.getObjects("Experimenter"))
@@ -976,10 +988,18 @@ class OmeroWebGateway (omero.gateway.BlitzGateway):
                 to_add.append(e._obj)
         
         admin_serv = self.getAdminService()
+        userGid = admin_serv.getSecurityRoles().userGroupId
+        failures = []
         for e in to_add:
             admin_serv.addGroups(e, [group._obj])
         for e in to_remove:
+            # Experimenter needs to stay in at least 1 non-user group
+            gs = [l.parent.id.val for l in e.copyGroupExperimenterMap() if l.parent.id.val != userGid]
+            if len(gs) == 1:
+                failures.append(ExperimenterWrapper(self, e))
+                continue
             admin_serv.removeGroups(e, [group._obj])
+        return failures
     
     def setOwnersOfGroup(self, group, new_owners):
         """
@@ -2033,8 +2053,10 @@ class ExperimenterGroupWrapper (OmeroWebObjectWrapper, omero.gateway.Experimente
         if settings.UI_MENU_DROPDOWN.get("COLLEAGUES", None):
             self.colleagues = summary["colleagues"]
             self.colleagues.sort(key=lambda x: x.getLastName().lower())
+        # Only show 'All Members' option if configured, and we're not in a private group
         if settings.UI_MENU_DROPDOWN.get("ALL", None):
-            self.all = True
+            if self.details.permissions.isGroupRead() or self._conn.isAdmin() or self.isOwner():
+                self.all = True
 
     def getOwners(self):
         for gem in self.copyGroupExperimenterMap():
@@ -2061,6 +2083,10 @@ class ExperimenterGroupWrapper (OmeroWebObjectWrapper, omero.gateway.Experimente
             if not flag:
                 yield ExperimenterWrapper(self._conn, gem.child)
     
+    def isOwner(self):
+        """ Returns True if current user is Owner of this group """
+        return self.getId() in self._conn.getEventContext().leaderOfGroups
+
     def isLocked(self):
         if self.name == "user":
             return True
