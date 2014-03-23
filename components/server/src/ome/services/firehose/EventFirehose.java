@@ -1,6 +1,8 @@
 package ome.services.firehose;
 
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
 import javax.jms.Destination;
@@ -9,6 +11,7 @@ import javax.jms.Session;
 import javax.jms.TextMessage;
 import ome.model.meta.Event;
 import ome.model.meta.EventLog;
+import com.google.gson.Gson;
 
 /**
  * @author Joshua Ballanco, jballanc at glencoesoftware.com
@@ -48,21 +51,20 @@ public class EventFirehose
 
     public void send(EventLog log)
     {
-        StringBuilder sb = new StringBuilder();
-        sb.append(log.getAction());
-        sb.append(" ");
-        sb.append(log);
-        sb.append(log.getEntityType());
-        sb.append(" ");
-        sb.append(log.getEntityId());
-        sb.append("\b");
+        Map<String, Object> eventMap = new HashMap<String, Object>();
+        eventMap.put("id", log.getEntityId());
+        eventMap.put("type", log.getEntityType());
+        eventMap.put("action", log.getAction());
+
+        Gson gson = new Gson();
+        String json = gson.toJson(eventMap);
 
         try
         {
             Connection conn = connectionFactory.createConnection();
             Session session = conn.createSession(false, Session.AUTO_ACKNOWLEDGE);
             MessageProducer producer = session.createProducer(destination);
-            TextMessage message = session.createTextMessage(sb.toString());
+            TextMessage message = session.createTextMessage(json);
             producer.send(message);
         }
         catch (Exception ex)

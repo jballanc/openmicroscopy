@@ -49,6 +49,7 @@
     <dependency org="org.hornetq" name="hornetq-jms-server" rev="${versions.hornetq}"/>
     <dependency org="org.hornetq" name="hornetq-jms-client" rev="${versions.hornetq}"/>
     <dependency org="org.hornetq" name="hornetq-spring-integration" rev="${versions.hornetq}"/>
+    <dependency org="com.google" name="gson" rev="${versions.gson}"/>
     <dependency org="xerces" name="xercesImpl" rev="${versions.xercesImpl}"/>
     <dependency org="xml-apis" name="xml-apis" rev="${versions.xml-apis}"/>
     <dependency org="xml-apis" name="xml-apis-ext" rev="${versions.xml-apis}"/>
