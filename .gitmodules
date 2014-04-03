@@ -1,6 +1,6 @@
 [submodule "components/bioformats"]
 	path = components/bioformats
-	url = git://github.com/openmicroscopy/bioformats.git
+	url = git://github.com/glencoesoftware/bioformats-private.git
 	ignore = dirty
 [submodule "docs/sphinx"]
 	path = docs/sphinx
