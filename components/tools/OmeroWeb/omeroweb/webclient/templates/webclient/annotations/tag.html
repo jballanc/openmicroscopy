@@ -31,7 +31,7 @@
 
 <span class="tag_annotation_wrapper" id="tag_ann-{{ tag.id }}">
 	
-		<div class="tag">
+        <div class="tag {% if tag.getOwner.id == tag.link.getDetails.getOwner.id %}tag_owned_by_current_user{% else %}tag_owned_by_other_user{% endif %}">
 	        <a class='tooltip tag_inner' href="{% url 'load_template' 'usertags' %}?show=tag-{{ tag.id }}" target="_top">
 	            {{ tag.textValue }}
 	        </a>
