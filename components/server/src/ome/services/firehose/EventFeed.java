@@ -17,7 +17,7 @@ import com.google.gson.Gson;
  * @author Joshua Ballanco, jballanc at glencoesoftware.com
  * @since 6.0
  */
-public class EventFirehose
+public class EventFeed
 {
     private ConnectionFactory connectionFactory;
     private Destination destination;

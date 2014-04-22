@@ -13,7 +13,7 @@
         init-method="start"
         destroy-method="stop"/>
 
-  <bean id="eventFirehose" class="ome.services.firehose.EventFirehose">
+  <bean id="eventFirehose" class="ome.services.firehose.EventFeed">
     <property name="connectionFactory" ref="ConnectionFactory"/>
     <property name="destination" ref="/topic/firehose"/>
   </bean>

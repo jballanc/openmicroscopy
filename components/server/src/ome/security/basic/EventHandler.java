@@ -15,7 +15,7 @@ import ome.conditions.InternalException;
 import ome.conditions.SessionTimeoutException;
 import ome.model.meta.Event;
 import ome.model.meta.EventLog;
-import ome.services.firehose.EventFirehose;
+import ome.services.firehose.EventFeed;
 import ome.services.messages.ContextMessage;
 import ome.system.EventContext;
 import ome.tools.hibernate.SessionFactory;
@@ -61,7 +61,7 @@ public class EventHandler implements MethodInterceptor, ApplicationListener<Cont
 
     protected final SqlAction sql;
 
-    protected final EventFirehose firehose;
+    protected final EventFeed feed;
 
     protected final boolean readOnly;
 
@@ -76,17 +76,17 @@ public class EventHandler implements MethodInterceptor, ApplicationListener<Cont
      */
     public EventHandler(SqlAction sql,
             BasicSecuritySystem securitySystem, SessionFactory factory,
-            TransactionAttributeSource txSource, EventFirehose firehose) {
-        this(sql, securitySystem, factory, txSource, firehose, false);
+            TransactionAttributeSource txSource, EventFeed feed) {
+        this(sql, securitySystem, factory, txSource, feed, false);
     }
 
     public EventHandler(SqlAction sql,
             BasicSecuritySystem securitySystem, SessionFactory factory,
-            TransactionAttributeSource txSource, EventFirehose firehose,
+            TransactionAttributeSource txSource, EventFeed feed,
             boolean readOnly) {
         this.secSys = securitySystem;
         this.txSource = txSource;
-        this.firehose = firehose;
+        this.feed = feed;
         this.factory = factory;
         this.sql = sql;
         this.readOnly = readOnly;
@@ -303,7 +303,7 @@ public class EventHandler implements MethodInterceptor, ApplicationListener<Cont
             throw new InternalException(sb.toString());
         }
 
-        firehose.send(logs);
+        feed.send(logs);
 
         try {
             long lastValue = sql.nextValue("seq_eventlog", logs.size());

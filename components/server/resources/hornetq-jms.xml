@@ -20,8 +20,8 @@
 
   <!-- ***** TOPICS ***** -->
 
-  <topic name="firehose">
-    <entry name="/topic/firehose"/>
+  <topic name="eventFeed">
+    <entry name="/topic/eventFeed"/>
   </topic>
 
 </configuration>
