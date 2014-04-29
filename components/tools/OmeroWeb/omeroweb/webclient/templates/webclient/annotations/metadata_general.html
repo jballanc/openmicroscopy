@@ -446,21 +446,23 @@
                             for (var row = 0; row < result.data.rows.length; row++) {
                                 value += result.data.rows[row][col] + '<br />';
                             }
-                            var row = $('<tr><td></td><td></td></tr>');
+                            var row = $('<tr class="bulk-annotation"><td></td><td></td></tr>');
                             $('td:first-child', row).html(label);
                             $('td:last-child', row).html(value);
                             table.append(row);
                         }
                     }
                 };
-                $.getJSON('{% url 'webgateway_object_table_query' 'Plate.wells' 999 %}'.replace('999', wellId) +
-                    '?query=Well-' + wellId +
-                    '&callback=?',
-                     onAnnotations);
-                $.getJSON('{% url 'webgateway_object_table_query' 'Screen.plateLinks.child.wells' 999 %}'.replace('999', wellId) +
-                    '?query=Well-' + wellId +
-                    '&callback=?',
-                     onAnnotations);
+                if ($("#custom_annotations .bulk-annotation").length == 0) {
+                    $.getJSON('{% url 'webgateway_object_table_query' 'Plate.wells' 999 %}'.replace('999', wellId) +
+                        '?query=Well-' + wellId +
+                        '&callback=?',
+                         onAnnotations);
+                    $.getJSON('{% url 'webgateway_object_table_query' 'Screen.plateLinks.child.wells' 999 %}'.replace('999', wellId) +
+                        '?query=Well-' + wellId +
+                        '&callback=?',
+                         onAnnotations);
+                }
 
             {% endif %}
 
