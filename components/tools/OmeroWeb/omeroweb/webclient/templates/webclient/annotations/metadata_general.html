@@ -435,6 +435,35 @@
 
             {% endif %}
 
+            {% if manager.well %}
+                var wellId = {{manager.well.id}};
+                var onAnnotations = function(result) {
+                    if (result.data && result.data.rows) {
+                        var table = $("#custom_annotations").show();
+                        for (var col = 0; col < result.data.columns.length; col++) {
+                            var label = result.data.columns[col];
+                            var value = '';
+                            for (var row = 0; row < result.data.rows.length; row++) {
+                                value += result.data.rows[row][col] + '<br />';
+                            }
+                            var row = $('<tr><td class="title"></td><td></td></tr>');
+                            $('td:first-child', row).html(label);
+                            $('td:last-child', row).html(value);
+                            table.append(row);
+                        }
+                    }
+                };
+                $.getJSON('{% url 'webgateway_object_table_query' 'Plate.wells' 999 %}'.replace('999', wellId) +
+                    '?query=Well-' + wellId +
+                    '&callback=?',
+                     onAnnotations);
+                $.getJSON('{% url 'webgateway_object_table_query' 'Screen.plateLinks.child.wells' 999 %}'.replace('999', wellId) +
+                    '?query=Well-' + wellId +
+                    '&callback=?',
+                     onAnnotations);
+
+            {% endif %}
+
             });
             
     </script>
