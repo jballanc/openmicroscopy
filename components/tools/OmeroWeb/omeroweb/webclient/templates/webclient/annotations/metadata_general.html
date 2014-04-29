@@ -446,7 +446,7 @@
                             for (var row = 0; row < result.data.rows.length; row++) {
                                 value += result.data.rows[row][col] + '<br />';
                             }
-                            var row = $('<tr><td class="title"></td><td></td></tr>');
+                            var row = $('<tr><td></td><td></td></tr>');
                             $('td:first-child', row).html(label);
                             $('td:last-child', row).html(value);
                             table.append(row);
