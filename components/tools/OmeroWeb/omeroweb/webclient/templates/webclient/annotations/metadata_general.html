@@ -439,7 +439,7 @@
                 var wellId = {{manager.well.id}};
                 var onAnnotations = function(result) {
                     if (result.data && result.data.rows) {
-                        var table = $("#custom_annotations").show();
+                        var table = $("#bulk_annotations").show().empty();
                         for (var col = 0; col < result.data.columns.length; col++) {
                             var label = result.data.columns[col];
                             var value = '';
@@ -453,16 +453,14 @@
                         }
                     }
                 };
-                if ($("#custom_annotations .bulk-annotation").length == 0) {
-                    $.getJSON('{% url 'webgateway_object_table_query' 'Plate.wells' 999 %}'.replace('999', wellId) +
-                        '?query=Well-' + wellId +
-                        '&callback=?',
-                         onAnnotations);
-                    $.getJSON('{% url 'webgateway_object_table_query' 'Screen.plateLinks.child.wells' 999 %}'.replace('999', wellId) +
-                        '?query=Well-' + wellId +
-                        '&callback=?',
-                         onAnnotations);
-                }
+                $.getJSON('{% url 'webgateway_object_table_query' 'Plate.wells' 999 %}'.replace('999', wellId) +
+                    '?query=Well-' + wellId +
+                    '&callback=?',
+                    onAnnotations);
+                $.getJSON('{% url 'webgateway_object_table_query' 'Screen.plateLinks.child.wells' 999 %}'.replace('999', wellId) +
+                    '?query=Well-' + wellId +
+                    '&callback=?',
+                     onAnnotations);
 
             {% endif %}
 
@@ -899,7 +897,10 @@
             <!-- CUSTOM ANNOTATIONS -->
             <div class="annotations_section">
                 <h2>{% trans "Others" %}:</h2>
-                
+
+                    <!-- Loaded by AJAX -->
+                    <table id="bulk_annotations"/>
+
                     <!-- tool tips for each <td> is contained in child <span>, which are also hidden -->
                     <table id="custom_annotations">
                         {% for ann in manager.xml_annotations %}
