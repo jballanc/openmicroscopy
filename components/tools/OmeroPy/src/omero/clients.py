@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 
-   Copyright 2009 Glencoe Software, Inc. All rights reserved.
+   Copyright 2009 - 2014 Glencoe Software, Inc. All rights reserved.
    Use is subject to license terms supplied in LICENSE.txt
 
 """
@@ -979,6 +979,7 @@ class BaseClient(object):
         Returns all items in the "output" shared (session) memory
         """
         return self._env(unwrap, "getOutputKeys")
+
     #
     # Misc.
     #
