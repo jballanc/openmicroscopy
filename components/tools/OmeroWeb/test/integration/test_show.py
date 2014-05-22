@@ -112,12 +112,15 @@ def project_dataset_image(request, itest, update_service):
     return update_service.saveAndReturnObject(project)
 
 
-@pytest.fixture(scope='function')
+@pytest.fixture(scope='function', params=[1, 2])
 def tag(request, itest, update_service):
     """Returns a new OMERO TagAnnotation with required fields set."""
-    tag = TagAnnotationI()
-    tag.textValue = rstring(itest.uuid())
-    return update_service.saveAndReturnObject(tag)
+    name = rstring(itest.uuid())
+    for index in range(request.param):
+        tag = TagAnnotationI()
+        tag.textValue = name
+        tag = update_service.saveAndReturnObject(tag)
+    return tag
 
 
 @pytest.fixture(scope='function')
@@ -196,7 +199,7 @@ def screen_plate_run_well(request, itest, update_service):
     screen.name = rstring(itest.uuid())
     plate = PlateI()
     plate.name = rstring(itest.uuid())
-    # Well A10 (will have a WellSample)
+    # Well A10 (will have two WellSamples)
     well_a = WellI()
     well_a.row = rint(0)
     well_a.column = rint(9)
@@ -204,13 +207,18 @@ def screen_plate_run_well(request, itest, update_service):
     well_b = WellI()
     well_b.row = rint(0)
     well_b.column = rint(10)
-    ws = WellSampleI()
-    image = itest.new_image(name=itest.uuid())
+    ws_a = WellSampleI()
+    image_a = itest.new_image(name=itest.uuid())
+    ws_a.image = image_a
+    ws_b = WellSampleI()
+    image_b = itest.new_image(name=itest.uuid())
+    ws_b.image = image_b
     plate_acquisition = PlateAcquisitionI()
     plate_acquisition.plate = plate
-    ws.image = image
-    ws.plateAcquisition = plate_acquisition
-    well_a.addWellSample(ws)
+    ws_a.plateAcquisition = plate_acquisition
+    ws_b.plateAcquisition = plate_acquisition
+    well_a.addWellSample(ws_a)
+    well_a.addWellSample(ws_b)
     plate.addWell(well_a)
     plate.addWell(well_b)
     screen.linkPlate(plate)
@@ -416,8 +424,8 @@ def screen_plate_run_well_show_request(
     wells = sorted(plate.copyWells(), cmp_well_column)
     # Only the first Well has a WellSample and is linked to the
     # PlateAcquisition.
-    ws, = wells[0].copyWellSamples()
-    plate_acquisition = ws.plateAcquisition
+    ws_a, ws_b = wells[0].copyWellSamples()
+    plate_acquisition = ws_a.plateAcquisition
     as_string = 'well-%d' % wells[well_index].id.val
     initially_select = [
         'acquisition-%d' % plate_acquisition.id.val,
@@ -504,16 +512,21 @@ def tag_by_textvalue_path_request(request, tag, request_factory, path):
     }
 
 
-@pytest.fixture(scope='function', params=['A10', '1J'])
+@pytest.fixture(scope='module', params=['A10', '1J'])
+def well_name(request):
+    return request.param
+
+
+@pytest.fixture(scope='function')
 def well_by_name_path_request(
-        request, screen_plate_well, request_factory, path):
+        request, screen_plate_well, request_factory, path, well_name):
     """
     Returns a simple GET request object with the 'path' query string
     variable set in the key / value ("well.key=value") form.
     """
     plate, = screen_plate_well.linkedPlateList()
     well, = plate.copyWells()
-    as_string = 'plate.name=%s|well.name=%s' % (plate.name.val, request.param)
+    as_string = 'plate.name=%s|well.name=%s' % (plate.name.val, well_name)
     initially_select = [
         'plate-%d' % plate.id.val,
         'well-%d' % well.id.val
@@ -530,9 +543,18 @@ def well_by_name_path_request(
     }
 
 
-@pytest.fixture(scope='function', params=['A10', '1J'])
+@pytest.fixture(scope='module', params=[
+    'plate.name=%(plate_name)s|well.name=%(well_name)s',
+    'run=%(plate_acquisition_id)s|well.name=%(well_name)s'
+])
+def as_string_well_by_name(request):
+    return request.param
+
+
+@pytest.fixture(scope='function')
 def screen_plate_run_well_by_name_path_request(
-        request, screen_plate_run_well, request_factory, path):
+        request, screen_plate_run_well, request_factory, path, well_name,
+        as_string_well_by_name):
     """
     Returns a simple GET request object with the 'path' query string
     variable set in the new ("well.key=value") form with a PlateAcquisition
@@ -540,9 +562,13 @@ def screen_plate_run_well_by_name_path_request(
     """
     plate, = screen_plate_run_well.linkedPlateList()
     well_a, well_b = sorted(plate.copyWells(), cmp_well_column)
-    ws, = well_a.copyWellSamples()
-    plate_acquisition = ws.plateAcquisition
-    as_string = 'plate.name=%s|well.name=%s' % (plate.name.val, request.param)
+    ws_a, ws_b = well_a.copyWellSamples()
+    plate_acquisition = ws_a.plateAcquisition
+    as_string = as_string_well_by_name % {
+        'plate_acquisition_id': plate_acquisition.id.val,
+        'plate_name': plate.name.val,
+        'well_name': well_name
+    }
     initially_select = [
         'acquisition-%d' % plate_acquisition.id.val,
         'well-%d' % well_a.id.val
@@ -570,8 +596,8 @@ def screen_plate_run_illegal_run_request(
     """
     plate, = screen_plate_run_well.linkedPlateList()
     well_a, well_b = sorted(plate.copyWells(), cmp_well_column)
-    ws, = well_a.copyWellSamples()
-    plate_acquisition = ws.plateAcquisition
+    ws_a, ws_b = well_a.copyWellSamples()
+    plate_acquisition = ws_a.plateAcquisition
     as_string = 'plate.name-%s|run.name-Run%d' % (
         plate.name.val, plate_acquisition.id.val
     )
@@ -784,8 +810,8 @@ class TestShow(object):
         plate, = screen_plate_run_well.linkedPlateList()
         well_a, well_b = \
             sorted(plate.copyWells(), cmp_well_column)
-        ws, = well_a.copyWellSamples()
-        plate_acquisition = ws.plateAcquisition
+        ws_a, ws_b, = well_a.copyWellSamples()
+        plate_acquisition = ws_a.plateAcquisition
         first_selected = show.first_selected
         assert first_selected is not None
         assert isinstance(first_selected, PlateAcquisitionWrapper)
@@ -859,14 +885,14 @@ class TestShow(object):
         first_selected = show.first_selected
         assert first_selected is not None
         assert isinstance(first_selected, TagAnnotationWrapper)
-        assert first_selected.getId() == tag.id.val
-        assert show.initially_open == \
-            tag_by_textvalue_path_request['initially_open']
+        assert first_selected.getValue() == tag.textValue.val
+        assert len(show.initially_open) == \
+            len(tag_by_textvalue_path_request['initially_open'])
         assert show.initially_open_owner == \
             tag.details.owner.id.val
         assert show._first_selected == first_selected
-        assert show.initially_select == \
-            tag_by_textvalue_path_request['initially_select']
+        assert len(show.initially_select) == \
+            len(tag_by_textvalue_path_request['initially_select'])
 
     def test_well_by_name(
             self, conn, well_by_name_path_request, screen_plate_well):
@@ -899,8 +925,8 @@ class TestShow(object):
         plate, = screen_plate_run_well.linkedPlateList()
         well_a, well_b = \
             sorted(plate.copyWells(), cmp_well_column)
-        ws, = well_a.copyWellSamples()
-        plate_acquisition = ws.plateAcquisition
+        ws_a, ws_b = well_a.copyWellSamples()
+        plate_acquisition = ws_a.plateAcquisition
         first_selected = show.first_selected
         assert first_selected is not None
         assert isinstance(first_selected, PlateAcquisitionWrapper)
