@@ -38,6 +38,7 @@ import omero.cmd.graphs.ChmodI;
 import omero.cmd.graphs.ChownI;
 import omero.cmd.graphs.DeleteI;
 import omero.cmd.graphs.DeleteNewI;
+import omero.cmd.graphs.GraphRequestFactory;
 import omero.cmd.graphs.GraphSpecListI;
 
 /**
@@ -58,18 +59,76 @@ public class RequestObjectFactoryRegistry extends
 
     private final PixelsService pixelsService;
 
+<<<<<<< HEAD
+||||||| merged common ancestors
+    private final ThumbnailService thumbnailService;
+
+    private final MailUtil mailUtil;
+
+    private final PasswordUtil passwordUtil;
+
+    private final SecuritySystem sec;
+
+    private final PasswordProvider passwordProvider;
+
+=======
+    private final ThumbnailService thumbnailService;
+
+    private final MailUtil mailUtil;
+
+    private final PasswordUtil passwordUtil;
+
+    private final SecuritySystem sec;
+
+    private final PasswordProvider passwordProvider;
+
+    private final GraphRequestFactory graphRequestFactory;
+
+>>>>>>> rearrange Spring beans and new graph operation request instances
     private/* final */OmeroContext ctx;
 
     public RequestObjectFactoryRegistry(ExtendedMetadata em,
             ACLVoter voter,
             Roles roles,
+<<<<<<< HEAD
             PixelsService pixelsService) {
+||||||| merged common ancestors
+            PixelsService pixelsService,
+            ThumbnailService thumbnailService,
+            MailUtil mailUtil,
+            PasswordUtil passwordUtil,
+            SecuritySystem sec,
+            PasswordProvider passwordProvider) {
+=======
+            PixelsService pixelsService,
+            ThumbnailService thumbnailService,
+            MailUtil mailUtil,
+            PasswordUtil passwordUtil,
+            SecuritySystem sec,
+            PasswordProvider passwordProvider,
+            GraphRequestFactory graphRequestFactory) {
+>>>>>>> rearrange Spring beans and new graph operation request instances
 
         this.em = em;
         this.voter = voter;
         this.roles = roles;
         this.pixelsService = pixelsService;
+<<<<<<< HEAD
 
+||||||| merged common ancestors
+        this.thumbnailService = thumbnailService;
+        this.mailUtil = mailUtil;
+        this.passwordUtil = passwordUtil;
+        this.sec = sec;
+        this.passwordProvider = passwordProvider;
+=======
+        this.thumbnailService = thumbnailService;
+        this.mailUtil = mailUtil;
+        this.passwordUtil = passwordUtil;
+        this.sec = sec;
+        this.passwordProvider = passwordProvider;
+        this.graphRequestFactory = graphRequestFactory;
+>>>>>>> rearrange Spring beans and new graph operation request instances
     }
 
     public void setApplicationContext(ApplicationContext ctx)
@@ -127,11 +186,7 @@ public class RequestObjectFactoryRegistry extends
                 new ObjectFactory(ChgrpNewI.ice_staticId()) {
                     @Override
                     public Ice.Object create(String name) {
-                        try {
-                            return new ChgrpNewI();
-                        } catch (GraphException e) {
-                            throw new RuntimeException("failed to construct chgrp operation", e);
-                        }
+                        return graphRequestFactory.getRequest(ChgrpNewI.class);
                     }
 
                 });
@@ -168,11 +223,7 @@ public class RequestObjectFactoryRegistry extends
                 new ObjectFactory(DeleteNewI.ice_staticId()) {
                     @Override
                     public Ice.Object create(String name) {
-                        try {
-                            return new DeleteNewI();
-                        } catch (GraphException e) {
-                            throw new RuntimeException("failed to construct delete operation", e);
-                        }
+                        return graphRequestFactory.getRequest(DeleteNewI.class);
                     }
 
                 });
