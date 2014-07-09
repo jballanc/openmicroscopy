@@ -19,15 +19,12 @@ import omero
 import omero.clients
 
 from django.http import HttpResponse, HttpResponseServerError, HttpResponseRedirect, Http404
-from django.utils.encoding import smart_str
-from django.utils.http import urlquote
-from django.views.decorators.http import require_POST
 from django.template import loader as template_loader
 from django.core.urlresolvers import reverse
 from django.conf import settings
 from django.template import RequestContext as Context
 from django.core.servers.basehttp import FileWrapper
-from omero.rtypes import rint, rlong, unwrap
+from omero.rtypes import rlong, unwrap
 from omero.constants.namespaces import NSBULKANNOTATIONS
 from omero_version import build_year
 from marshal import imageMarshal, shapeMarshal
@@ -39,15 +36,13 @@ except:
 
 from cStringIO import StringIO
 
-from omero import client_wrapper, ApiUsageException
-from omero.gateway import timeit, TimeIt
-from omeroweb.http import HttpJavascriptResponse
+from omero import ApiUsageException
+from omero.util.decorators import timeit, TimeIt
+from omeroweb.http import HttpJavascriptResponse, HttpJsonResponse, \
+    HttpJavascriptResponseServerError
 
-import Ice
 import glob
 
-
-import settings
 
 #from models import StoredConnection
 
@@ -261,7 +256,7 @@ def render_birds_eye_view (request, iid, size=None,
     """
     if size is None:
         size = 96       # Use cached thumbnail
-    return render_thumbnail(request, iid, w=size)
+    return render_thumbnail(request, iid, w=size, **kwargs)
 
 @login_required()
 def render_thumbnail (request, iid, w=None, h=None, conn=None, _defcb=None, **kwargs):
@@ -704,7 +699,6 @@ def render_image_region(request, iid, z, t, conn=None, **kwargs):
     if tile:
         try:
             img._prepareRenderingEngine()
-            tiles = img._re.requiresPixelsPyramid()
             w, h = img._re.getTileSize()
             levels = img._re.getResolutionLevels()-1
 
@@ -769,11 +763,23 @@ def render_image (request, iid, z=None, t=None, conn=None, **kwargs):
             raise Http404
         webgateway_cache.setImage(request, server_id, img, z, t, jpeg_data)
 
+    format = request.REQUEST.get('format', 'jpeg')
     rsp = HttpResponse(jpeg_data, content_type='image/jpeg')
     if 'download' in kwargs and kwargs['download']:
+        if format == 'png':
+            # convert jpeg data to png...
+            i = Image.open(StringIO(jpeg_data))
+            output = StringIO()
+            i.save(output, 'png')
+            jpeg_data = output.getvalue()
+            output.close()
+            rsp = HttpResponse(jpeg_data, content_type='image/png')
+        # don't seem to need to do this for tiff
+        elif format == 'tif':
+            rsp = HttpResponse(jpeg_data, content_type='image/tif')
         rsp['Content-Type'] = 'application/force-download'
         rsp['Content-Length'] = len(jpeg_data)
-        rsp['Content-Disposition'] = 'attachment; filename=%s.jpg' % (img.getName().replace(" ","_"))
+        rsp['Content-Disposition'] = 'attachment; filename=%s.%s' % (img.getName().replace(" ","_"), format)
     return rsp
 
 @login_required()
@@ -1276,7 +1282,6 @@ def listDatasets_json (request, pid, conn=None, **kwargs):
     """
 
     project = conn.getObject("Project", pid)
-    rv = []
     if project is None:
         return HttpJavascriptResponse('[]')
     return [x.simpleMarshal(xtra={'childCount':0}) for x in project.listChildren()]
@@ -1383,6 +1388,7 @@ def search_json (request, conn=None, **kwargs):
     @return:            json search results
     TODO: cache
     """
+    server_id = request.session['connector'].server_id
     opts = searchOptFromRequest(request)
     rv = []
     logger.debug("searchObjects(%s)" % (opts['search']))
@@ -1390,7 +1396,6 @@ def search_json (request, conn=None, **kwargs):
     def urlprefix(iid):
         return reverse('webgateway.views.render_thumbnail', args=(iid,))
     xtra = {'thumbUrlPrefix': kwargs.get('urlprefix', urlprefix)}
-    pks = None
     try:
         if opts['ctx'] == 'imgs':
             sr = conn.searchObjects(["image"], opts['search'], conn.SERVICE_OPTS)
@@ -1498,6 +1503,29 @@ def list_compatible_imgs_json (request, iid, conn=None, **kwargs):
     if r.get('callback', None):
         json_data = '%s(%s)' % (r['callback'], json_data)
     return HttpJavascriptResponse(json_data)
+
+
+@login_required()
+@jsonp
+def apply_owners_rdef_json (request, conn=None, **kwargs):
+    """
+    Simply takes request 'to_type' and 'toids' and
+    delegates to Rendering Settings service to reset
+    settings according to the owner's settings.
+    """
+
+    r = request.REQUEST
+    toids = r.getlist('toids')
+    to_type = str(r.get('to_type', 'image'))
+
+    to_type = to_type.title()
+    toids = map(lambda x: long(x), toids)
+
+    rss = conn.getRenderingSettingsService()
+    rss.resetDefaultsByOwnerInSet(to_type, toids)
+
+    return {'OK': True}
+
 
 @login_required()
 @jsonp
@@ -1623,8 +1651,8 @@ def copy_image_rdef_json (request, conn=None, **kwargs):
 @jsonp
 def reset_image_rdef_json (request, iid, conn=None, **kwargs):
     """
-    Try to remove all rendering defs the logged in user has for this image.
-
+    Reset rendering defs default for this image. Do not delete other related settings.
+    
     @param request:     http request
     @param iid:         Image ID
     @param conn:        L{omero.gateway.BlitzGateway}
@@ -1633,20 +1661,13 @@ def reset_image_rdef_json (request, iid, conn=None, **kwargs):
 
     img = conn.getObject("Image", iid)
 
-    if img is not None and img.resetRDefs():
+    if img is not None and img.resetDefaults():
         user_id = conn.getEventContext().userId
         server_id = request.session['connector'].server_id
         webgateway_cache.invalidateObject(server_id, user_id, img)
         return True
-        json_data = 'true'
     else:
-        json_data = 'false'
         return False
-#    if _conn is not None:
-#        return json_data == 'true'      # TODO: really return a boolean? (not json)
-#    if r.get('callback', None):
-#        json_data = '%s(%s)' % (r['callback'], json_data)
-#    return HttpJavascriptResponse(json_data)
 
 @login_required()
 def full_viewer (request, iid, conn=None, **kwargs):
@@ -1685,16 +1706,113 @@ def full_viewer (request, iid, conn=None, **kwargs):
 
 
 @login_required(doConnectionCleanup=False)
-def archived_files(request, iid, conn=None, **kwargs):
+def download_as(request, iid=None, conn=None, **kwargs):
+    """
+    Downloads the image as a single jpeg/png/tiff or as a zip (if more than one image)
+    """
+    format = request.REQUEST.get('format', 'png')
+    if format not in ('jpeg', 'png', 'tif'):
+        format = 'png'
+    if iid is None:
+        imgIds = request.REQUEST.getlist('image')
+        if len(imgIds) == 0:
+            return HttpResponseServerError("No images specified in request. Use ?image=123")
+    else:
+        imgIds = [iid]
+
+    images = list(conn.getObjects("Image", imgIds))
+    if len(images) == 0:
+        msg = "Cannot download as %s. Images (ids: %s) not found." % (format, imgIds)
+        logger.debug(msg)
+        return HttpResponseServerError(msg)
+
+    if len(images) == 1:
+        jpeg_data = images[0].renderJpeg()
+        if jpeg_data is None:
+            raise Http404
+        rsp = HttpResponse(jpeg_data, mimetype='image/jpeg')
+        rsp['Content-Length'] = len(jpeg_data)
+        rsp['Content-Disposition'] = 'attachment; filename=%s.jpg' % (images[0].getName().replace(" ","_"))
+    else:
+        import tempfile
+        temp = tempfile.NamedTemporaryFile(suffix='.download_as')
+
+        def makeImageName(originalName, extension, folder_name):
+            name = os.path.basename(originalName)
+            imgName = "%s.%s" % (name, extension)
+            imgName = os.path.join(folder_name, imgName)
+            # check we don't overwrite existing file
+            i = 1
+            name = imgName[:-(len(extension)+1)]
+            while os.path.exists(imgName):
+                imgName = "%s_(%d).%s" % (name, i, extension)
+                i += 1
+            return imgName
+
+        try:
+            temp_zip_dir = tempfile.mkdtemp()
+            logger.debug("download_as dir: %s" % temp_zip_dir)
+            try:
+                for img in images:
+                    z = t = None
+                    pilImg = img.renderImage(z, t)
+                    imgPathName = makeImageName(img.getName(), format, temp_zip_dir)
+                    pilImg.save(imgPathName)
+                # create zip
+                zip_file = zipfile.ZipFile(temp, 'w', zipfile.ZIP_DEFLATED)
+                try:
+                    a_files = os.path.join(temp_zip_dir, "*")
+                    for name in glob.glob(a_files):
+                        zip_file.write(name, os.path.basename(name))
+                finally:
+                    zip_file.close()
+            finally:
+                shutil.rmtree(temp_zip_dir, ignore_errors=True)
+
+            zipName = request.REQUEST.get('zipname', 'Download_as_%s' % format)
+            zipName = zipName.replace(" ","_")
+            if not zipName.endswith('.zip'):
+                zipName = "%s.zip" % zipName
+
+            # return the zip or single file
+            imageFile_data = FileWrapper(temp)
+            rsp = HttpResponse(imageFile_data)
+            rsp['Content-Length'] = temp.tell()
+            rsp['Content-Disposition'] = 'attachment; filename=%s' % zipName
+            temp.seek(0)
+        except Exception:
+            temp.close()
+            stack = traceback.format_exc()
+            logger.error(stack)
+            return HttpResponseServerError("Cannot download file (id:%s).\n%s" % (iid, stack))
+
+    rsp['Content-Type'] = 'application/force-download'
+    return rsp
+
+
+@login_required(doConnectionCleanup=False)
+def archived_files(request, iid=None, conn=None, **kwargs):
     """
     Downloads the archived file(s) as a single file or as a zip (if more than one file)
     """
-    image = conn.getObject("Image", iid)
-    if image is None:
-        logger.debug("Cannot download archived file becuase Image does not exist.")
-        return HttpResponseServerError("Cannot download archived file becuase Image does not exist (id:%s)." % (iid))
+    if iid is None:
+        imgIds = request.REQUEST.getlist('image')
+        if len(imgIds) == 0:
+            return HttpResponseServerError("No images specified in request. Use ?image=123")
+    else:
+        imgIds = [iid]
 
-    files = list(image.getImportedImageFiles())
+    images = list(conn.getObjects("Image", imgIds))
+    if len(images) == 0:
+        logger.debug("Cannot download archived file becuase Images not found.")
+        return HttpResponseServerError("Cannot download archived file becuase Images not found (ids: %s)." % (imgIds))
+
+    # make list of all files, removing duplicates
+    fileMap = {}
+    for image in images:
+        for f in image.getImportedImageFiles():
+            fileMap[f.getId()] = f
+    files = fileMap.values()
 
     if len(files) == 0:
         logger.debug("Tried downloading archived files from image with no files archived.")
@@ -1734,16 +1852,19 @@ def archived_files(request, iid, conn=None, **kwargs):
             finally:
                 shutil.rmtree(temp_zip_dir, ignore_errors=True)
 
-            file_name = "%s.zip" % image.getName().replace(" ","_")
+            zipName = request.REQUEST.get('zipname', image.getName())
+            zipName = zipName.replace(" ","_")
+            if not zipName.endswith('.zip'):
+                zipName = "%s.zip" % zipName
 
             # return the zip or single file
             archivedFile_data = FileWrapper(temp)
             rsp = ConnCleaningHttpResponse(archivedFile_data)
             rsp.conn = conn
             rsp['Content-Length'] = temp.tell()
-            rsp['Content-Disposition'] = 'attachment; filename=%s' % file_name
+            rsp['Content-Disposition'] = 'attachment; filename=%s' % zipName
             temp.seek(0)
-        except Exception, x:
+        except Exception:
             temp.close()
             stack = traceback.format_exc()
             logger.error(stack)
@@ -1887,7 +2008,7 @@ def _annotations(request, objtype, objid, conn=None, **kwargs):
     try:
         obj = q.findByQuery(query, omero.sys.ParametersI().addId(objid),
                             conn.createServiceOptsDict())
-    except omero.QueryException, ex:
+    except omero.QueryException:
         return dict(error='%s cannot be queried' % objtype,
                     query=query)
 
@@ -1944,7 +2065,7 @@ def _table_query(request, fileid, conn=None, **kwargs):
             query = '(%s==%s)' % (match.group(1), match.group(2))
         try:
             hits = t.getWhereList(query, None, 0, rows, 1)
-        except Exception, e:
+        except Exception:
             return dict(error='Error executing query: %s' % query)
 
     return dict(data=dict(

@@ -24,9 +24,8 @@ Decorators for use with OMERO.web applications.
 """
 
 import logging
-import json
 
-from django.http import Http404, HttpResponse, HttpResponseRedirect, HttpResponseForbidden
+from django.http import Http404, HttpResponse, HttpResponseRedirect, HttpResponseForbidden, StreamingHttpResponse
 
 from django.conf import settings
 from django.utils.http import urlencode
@@ -51,7 +50,7 @@ def parse_url(lookup_view):
             url = reverse(viewname=lookup_view["viewname"])
         if "query_string" in lookup_view.keys():
             url = url + "?" + lookup_view["query_string"]
-    except KeyError, e:
+    except KeyError:
         # assume we've been passed a url
         try:
             resolve(lookup_view)
@@ -72,7 +71,7 @@ def get_client_ip(request):
     return ip
 
 
-class ConnCleaningHttpResponse(HttpResponse):
+class ConnCleaningHttpResponse(StreamingHttpResponse):
     """Extension of L{HttpResponse} which closes the OMERO connection."""
 
     def close(self):
@@ -125,7 +124,7 @@ class login_required(object):
     def get_share_connection (self, request, conn, share_id):
         try:
             conn.SERVICE_OPTS.setOmeroShare(share_id)
-            share = conn.getShare(share_id)
+            conn.getShare(share_id)
             return conn
         except:
             logger.error('Error activating share.', exc_info=True)
@@ -163,9 +162,9 @@ class login_required(object):
                             url = parse_url(settings.LOGIN_REDIRECT)
                     except Http404:
                         logger.error('Cannot resolve url %s' % lookup_view)
-        except KeyError, x:
+        except KeyError:
             pass
-        except Exception, x:
+        except Exception:
             logger.error('Error while redirection on not logged in.', exc_info=True)
         
         args = {'url': url}

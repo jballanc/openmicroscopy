@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 Glencoe Software, Inc. All rights reserved.
+ * Copyright (C) 2012-2014 Glencoe Software, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.aop.framework.Advised;
 
 import Ice.Current;
 
@@ -37,7 +38,6 @@ import ome.services.blitz.util.ServiceFactoryAware;
 import omero.ServerError;
 import omero.api.RawFileStorePrx;
 import omero.cmd.HandlePrx;
-import omero.constants.CLIENTUUID;
 import omero.grid.ImportLocation;
 import omero.grid.ImportProcessPrx;
 import omero.grid.ImportProcessPrxHelper;
@@ -45,7 +45,6 @@ import omero.grid.ImportRequest;
 import omero.grid.ImportSettings;
 import omero.grid._ImportProcessOperations;
 import omero.grid._ImportProcessTie;
-import omero.model.ChecksumAlgorithm;
 import omero.model.Fileset;
 import omero.model.FilesetJobLink;
 
@@ -138,12 +137,6 @@ public class ManagedImportProcessI extends AbstractCloseableAmdServant
     /**
      * Create and register a servant for servicing the import process
      * within a managed repository.
-     *
-     * @param repo
-     * @param fs
-     * @param location
-     * @param settings
-     * @param __current
      */
     public ManagedImportProcessI(ManagedRepositoryI repo, Fileset fs,
             ImportLocation location, ImportSettings settings, Current __current)
@@ -221,6 +214,8 @@ public class ManagedImportProcessI extends AbstractCloseableAmdServant
 
         boolean success = false;
         RawFileStorePrx prx = repo.file(path, "rw", this.current);
+        registerCallback(prx, i);
+
         try {
             state = new UploadState(prx); // Overwrite
             if (uploaders.putIfAbsent(i, state) != null) {
@@ -241,6 +236,37 @@ public class ManagedImportProcessI extends AbstractCloseableAmdServant
                 }
             }
         }
+    }
+
+    protected void registerCallback(RawFileStorePrx prx, final int idx) {
+        Object servant = this.sf.getServant(prx.ice_getIdentity());
+        if (servant instanceof Advised) {
+            try {
+                servant = ((Advised) servant).getTargetSource().getTarget();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+        RepoRawFileStoreI store = (RepoRawFileStoreI) servant;
+
+        final ManagedImportProcessI proc = this;
+        store.setCallback(new RepoRawFileStoreI.NoOpCallback() {
+
+            @Override
+            public void onWrite(byte[] buf, long position, long length) {
+                proc.setOffset(idx, position+length);
+            }
+
+            /**
+             * During the close process, remove this instance from the
+             * "uploaders" hash map in order to prevent concurrent access
+             * issues.
+             */
+            @Override
+            public void onPreClose() {
+                proc.closeCalled(idx);
+            }
+        });
     }
 
     public HandlePrx verifyUpload(List<String> hashes, Current __current)
@@ -281,8 +307,7 @@ public class ManagedImportProcessI extends AbstractCloseableAmdServant
         // Now move on to the metadata import.
         link = fs.getFilesetJobLink(1);
         CheckedPath checkedPath = ((ManagedImportLocationI) location).getLogFile();
-        omero.model.OriginalFile logFile =
-                repo.registerLogFile(repo.getRepoUuid(),  fs.getId().getValue(), checkedPath,__current);
+        final omero.model.OriginalFile logFile = repo.findInDb(checkedPath, "r", __current);
 
         final String reqId = ImportRequest.ice_staticId();
         final ImportRequest req = (ImportRequest)

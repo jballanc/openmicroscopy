@@ -23,9 +23,7 @@
 # Version: 1.0
 #
 
-import os.path
-
-from django.conf.urls import *
+from django.conf.urls import url, patterns
 from django.views.generic import TemplateView
 
 from omeroweb.webclient import views
@@ -43,6 +41,7 @@ urlpatterns = patterns('django.views.generic.simple',
     # render main template
     url( r'^(?P<menu>((?i)userdata|public|history|search|help|usertags))/$', views.load_template, name="load_template" ),
     url( r'^userdata/$', views.load_template, {'menu':'userdata'}, name="userdata" ),
+    url( r'^history/$', views.load_template, {'menu':'history'}, name="history" ),
 
     url( r'^last_imports/$', views.index_last_imports, name="index_last_imports" ),
     url( r'^most_recent/$', views.index_most_recent, name="index_most_recent" ),
@@ -104,6 +103,9 @@ urlpatterns = patterns('django.views.generic.simple',
 
     # Fileset query (for delete or chgrp dialogs) obj-types and ids in REQUEST data
     url( r'^fileset_check/(?P<action>((?i)delete|chgrp))/$', views.fileset_check, name="fileset_check"),
+
+    # Popup for downloading original archived files for images
+    url( r'^download_placeholder/$', views.download_placeholder, name="download_placeholder" ),
 
     # chgrp - 'group_id', obj-types and ids in POST data
     url( r'^chgrp/$', views.chgrp, name="chgrp"),

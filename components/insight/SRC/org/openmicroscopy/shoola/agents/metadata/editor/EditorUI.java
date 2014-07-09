@@ -2,7 +2,7 @@
  * org.openmicroscopy.shoola.agents.metadata.editor.EditorUI 
  *
  *------------------------------------------------------------------------------
- *  Copyright (C) 2006-2008 University of Dundee. All rights reserved.
+ *  Copyright (C) 2006-2014 University of Dundee. All rights reserved.
  *
  *
  * 	This program is free software; you can redistribute it and/or modify
@@ -47,7 +47,9 @@ import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 
+
 //Third-party libraries
+import org.apache.commons.collections.CollectionUtils;
 import org.jdesktop.swingx.JXTaskPane;
 
 //Application-internal dependencies
@@ -303,7 +305,28 @@ class EditorUI
     	generalPane.setParentRootObject();
     	userUI.setParentRootObject();
     }
-    
+
+    /** Resets the selected tab when an image or well sample is selected.*/
+    void handleImageSelection()
+    {
+        ImageData img = model.getImage();
+        if (img == null) return;
+        tabPane.setEnabledAt(ACQUISITION_INDEX, img.getId() > 0);
+        boolean preview = model.isPreviewAvailable();
+        tabPane.setEnabledAt(RND_INDEX, preview);
+        if (!preview) {
+            tabPane.setToolTipTextAt(RND_INDEX, 
+                    "Only available for non big images.");
+        }
+        
+        if (getSelectedTab() == RND_INDEX) {
+            tabPane.setComponentAt(RND_INDEX, dummyPanel);
+            if (!preview && 
+                    model.getRndIndex() != 
+                        MetadataViewer.RND_SPECIFIC) 
+                tabPane.setSelectedIndex(GENERAL_INDEX);
+        }
+    }
     /**
      * Updates display when the new root node is set.
      * 
@@ -315,7 +338,7 @@ class EditorUI
 		tabPane.setComponentAt(RND_INDEX, dummyPanel);
 		setDataToSave(false);
 		toolBar.buildUI();
-		tabPane.setToolTipTextAt(RND_INDEX, "");
+		tabPane.setToolTipTextAt(RND_INDEX, RENDERER_DESCRIPTION);
 		boolean preview = false;
 		int selected = getSelectedTab();
 		if (!(uo instanceof DataObject)) {
@@ -343,54 +366,8 @@ class EditorUI
 				tabPane.setEnabledAt(ACQUISITION_INDEX, false);
 				tabPane.setEnabledAt(RND_INDEX, false);
 			} else {
-				if (uo instanceof ImageData) {
-					load = true;
-					ImageData img = (ImageData) uo;
-					tabPane.setEnabledAt(ACQUISITION_INDEX, img.getId() > 0);
-					preview = model.isPreviewAvailable();
-					tabPane.setEnabledAt(RND_INDEX, preview);
-					if (!preview) {
-						tabPane.setToolTipTextAt(RND_INDEX, 
-								"Only available for image of size <= "+
-								RenderingControl.MAX_SIZE+"x"+
-								RenderingControl.MAX_SIZE);
-					}
-					
-					if (selected == RND_INDEX) {
-						tabPane.setComponentAt(RND_INDEX, dummyPanel);
-						if (!preview && 
-								model.getRndIndex() != 
-									MetadataViewer.RND_SPECIFIC) 
-							tabPane.setSelectedIndex(GENERAL_INDEX);
-					}
-				} else if (uo instanceof WellSampleData) {
-					ImageData img = ((WellSampleData) uo).getImage();
-					if (tabPane.getSelectedIndex() == RND_INDEX) {
-						tabPane.setComponentAt(RND_INDEX, dummyPanel);
-						if (model.canEdit())
-							tabPane.setSelectedIndex(GENERAL_INDEX);
-					}
-					if (img != null && img.getId() >= 0) {
-						load = true;
-						tabPane.setEnabledAt(ACQUISITION_INDEX, true);
-						preview = model.isPreviewAvailable();
-						tabPane.setEnabledAt(RND_INDEX, preview);
-						if (!preview) {
-							tabPane.setToolTipTextAt(RND_INDEX, 
-									"Only available for image of size <= "+
-									RenderingControl.MAX_SIZE+"x"+
-									RenderingControl.MAX_SIZE);
-						}
-						if (selected == RND_INDEX) {
-							tabPane.setComponentAt(RND_INDEX, dummyPanel);
-							//tabPane.setSelectedIndex(GENERAL_INDEX);
-							if (!preview) tabPane.setSelectedIndex(GENERAL_INDEX);
-						}
-					} else {
-						tabPane.setSelectedIndex(GENERAL_INDEX);
-						tabPane.setEnabledAt(ACQUISITION_INDEX, false);
-						tabPane.setEnabledAt(RND_INDEX, false);
-					}
+				if (uo instanceof ImageData || uo instanceof WellSampleData) {
+					handleImageSelection();
 				} else {
 					tabPane.setSelectedIndex(GENERAL_INDEX);
 					tabPane.setEnabledAt(ACQUISITION_INDEX, false);
@@ -592,13 +569,16 @@ class EditorUI
 		while (i.hasNext()) {
 			o = i.next();
 			links = model.getLinks(level, o);
-			if (links != null) toRemove.addAll(links);
+			if (links != null)
+			{
+			    toRemove.addAll(links);
+			}
 		}
 		DataToSave object = new DataToSave(new ArrayList<AnnotationData>(), 
 				toRemove);
 		model.fireAnnotationSaving(object, null, true);
 	}
-	
+    
 	/**
 	 * Removes the tags.
 	 * 
@@ -610,7 +590,7 @@ class EditorUI
 		if (!generalPane.hasTagsToUnlink()) return;
 		if (model.isGroupLeader() || model.isAdministrator()) {
 			if (tagMenu == null) {
-				tagMenu = new PermissionMenu(PermissionMenu.UNLINK, "Tags");
+				tagMenu = new PermissionMenu(PermissionMenu.REMOVE, "Tags");
 				tagMenu.addPropertyChangeListener(new PropertyChangeListener() {
 					
 					public void propertyChange(PropertyChangeEvent evt) {
@@ -648,7 +628,7 @@ class EditorUI
 		if (!generalPane.hasOtherAnnotationsToUnlink()) return;
 		if (model.isGroupLeader() || model.isAdministrator()) {
 			if (otherAnnotationMenu == null) {
-				otherAnnotationMenu = new PermissionMenu(PermissionMenu.UNLINK, 
+				otherAnnotationMenu = new PermissionMenu(PermissionMenu.REMOVE, 
 						"Other annotations");
 				otherAnnotationMenu.addPropertyChangeListener(
 						new PropertyChangeListener() {
@@ -679,14 +659,42 @@ class EditorUI
 	/**
 	 * Handles the selection of objects via the selection wizard.
 	 * 
-	 * @param type		The type of objects to handle.
-	 * @param objects 	The objects to handle.
+	 * @param type The type of objects to handle.
+	 * @param objects The objects to handle.
 	 */
-	void handleObjectsSelection(Class type, Collection objects)
+	void handleObjectsSelection(Class<?> type, Collection objects)
 	{
 		if (objects == null) return;
-		generalPane.handleObjectsSelection(type, objects);
-		saveData(true);	
+		List<Object> selection = new ArrayList<Object>();
+		if (CollectionUtils.isNotEmpty(objects)) {
+		    selection.addAll(objects);
+		}
+		 AnnotationData data;
+		if (TagAnnotationData.class.equals(type)) {
+		    Collection<TagAnnotationData> l = model.getCommonTags();
+	        if (CollectionUtils.isNotEmpty(l)) {
+	            Iterator<TagAnnotationData> k = l.iterator();
+	            while (k.hasNext()) {
+	                data = k.next();
+	                if (!model.isAnnotationUsedByUser(data)) {
+	                    selection.add(data);
+	                }
+	            }
+	        }
+		} else if (FileAnnotationData.class.equals(type)) {
+		    Collection<FileAnnotationData> l = model.getCommonAttachments();
+            if (CollectionUtils.isNotEmpty(l)) {
+                Iterator<FileAnnotationData> k = l.iterator();
+                while (k.hasNext()) {
+                    data = k.next();
+                    if (!model.isAnnotationUsedByUser(data)) {
+                        selection.add(data);
+                    }
+                }
+            }
+		}
+		generalPane.handleObjectsSelection(type, selection);
+		saveData(true);
 	}
 	
 	/** 
@@ -694,7 +702,7 @@ class EditorUI
 	 * 
 	 * @param file The file to remove.
 	 */
-	void removeAttachedFile(Object file)
+	void unlinkAttachedFile(Object file)
 	{
 		if (file == null) return;
 		generalPane.removeAttachedFile(file);
@@ -715,15 +723,15 @@ class EditorUI
 		if (!generalPane.hasAttachmentsToUnlink()) return;
 		if (model.isAdministrator() || model.isGroupLeader()) {
 			if (docMenu == null) {
-				docMenu = new PermissionMenu(PermissionMenu.UNLINK,
+				docMenu = new PermissionMenu(PermissionMenu.REMOVE,
 						"Attachments");
 				docMenu.addPropertyChangeListener(new PropertyChangeListener() {
 					
 					public void propertyChange(PropertyChangeEvent evt) {
 						String n = evt.getPropertyName();
 						if (PermissionMenu.SELECTED_LEVEL_PROPERTY.equals(n)) {
-							removeLinks((Integer) evt.getNewValue(), 
-									model.getAllAttachments());
+						    List<FileAnnotationData> toRemove = model.getFileAnnotatationsByLevel((Integer) evt.getNewValue());
+						    model.fireFileAnnotationRemoveCheck(toRemove);
 						}
 					}
 				});
@@ -739,7 +747,8 @@ class EditorUI
 		Point p = new Point(location.x-d.width/2, location.y);
 		if (box.showMsgBox(p) == MessageBox.YES_OPTION) {
 			List<FileAnnotationData> list = generalPane.removeAttachedFiles();
-			if (list.size() > 0) saveData(true);
+			if (list.size() > 0) 
+			    model.fireFileAnnotationRemoveCheck(list);
 		}
 	}
 	
@@ -1056,9 +1065,32 @@ class EditorUI
 	{
 		toolBar.onSizeLoaded();
 	}
-	
-	/** Displays the file set.*/
-	void displayFileset() { toolBar.displayFileset(); }
+
+	/** Displays the file set.
+ 	 *
+	 * @param trigger The action which triggered the loading,
+	 * see {@link EditorControl#FILE_PATH_TOOLBAR}
+	 * or {@link EditorControl#FILE_PATH_INPLACE_ICON}
+	 * */
+	void displayFileset(int trigger) { 
+	    if (CollectionUtils.isEmpty(model.getFileset())) {
+	        toolBar.enableFilePathButton(false);
+	    }
+	    else {
+	        toolBar.enableFilePathButton(true);
+	        // show the filepaths if this was triggered by the user
+	        switch (trigger) {
+	                case EditorControl.FILE_PATH_TOOLBAR:
+	                    toolBar.displayFileset();
+	                    break;
+	                case EditorControl.FILE_PATH_INPLACE_ICON:
+	                    generalPane.getPropertiesUI().displayFileset();
+	                    break;
+	                default:
+	                    return;
+	            }
+	    }
+	}
 	
 	/**
 	 * Returns the file set.

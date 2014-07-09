@@ -44,13 +44,20 @@ class LoadControl(BaseControl):
     def _configure(self, parser):
         parser.add_argument("infile", nargs="*", type=FileType("r"),
                             default=[sys.stdin])
+        parser.add_argument(
+            "-k", "--keep-going", action="store_true", default=False,
+            help="Continue processing after an error.")
         parser.set_defaults(func=self.__call__)
 
     def __call__(self, args):
         for file in args.infile:
             self.ctx.dbg("Loading file %s" % file)
             for line in file:
-                self.ctx.invoke(line)
+                self.ctx.invoke(line, strict=(not args.keep_going))
+
+                if self.ctx.rv != 0:
+                    self.ctx.err("Ignoring error: %s" % line)
+                    self.ctx.rv = 0
 
 
 class ShellControl(BaseControl):
@@ -115,9 +122,9 @@ class HelpControl(BaseControl):
     def __call__(self, args):
 
         self.ctx.waitForPlugins()
-        #commands = "\n".join([" %s" % name for name in
-        #sorted(self.ctx.controls)])
-        #topics = "\n".join([" %s" % topic for topic in self.ctx.topics])
+        # commands = "\n".join([" %s" % name for name in
+        # sorted(self.ctx.controls)])
+        # topics = "\n".join([" %s" % topic for topic in self.ctx.topics])
         commands, topics = [
             self.__parser__._format_list(x) for x in
             [sorted(self.ctx.controls), sorted(self.ctx.topics)]]
@@ -136,7 +143,7 @@ class HelpControl(BaseControl):
                 self.ctx.out(self.ctx.topics[topic])
                 self.ctx.out("\n")
         elif not args.topic:
-            #self.ctx.invoke("-h")
+            # self.ctx.invoke("-h")
             key_list = {"program_name": sys.argv[0], "version": VERSION,
                         "commands": commands, "topics": topics}
             print """usage: %(program_name)s <command> [options] args

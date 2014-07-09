@@ -1,8 +1,5 @@
 /*
- * ome.formats.importer.gui.GuiCommonElements
- *
- *------------------------------------------------------------------------------
- *  Copyright (C) 2006-2008 University of Dundee. All rights reserved.
+ *  Copyright (C) 2006-2014 University of Dundee. All rights reserved.
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -28,12 +25,15 @@ import static omero.rtypes.rstring;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import ome.formats.importer.transfers.FileTransfer;
 import ome.formats.importer.transfers.UploadFileTransfer;
 import ome.services.blitz.repo.path.ClientFilePathTransformer;
 import ome.services.blitz.repo.path.FsFile;
+import omero.RString;
 import omero.constants.namespaces.NSFILETRANSFER;
 import omero.grid.ImportSettings;
 import omero.model.Annotation;
@@ -42,8 +42,6 @@ import omero.model.CommentAnnotationI;
 import omero.model.Fileset;
 import omero.model.FilesetEntry;
 import omero.model.FilesetEntryI;
-import omero.model.FilesetVersionInfo;
-import omero.model.FilesetVersionInfoI;
 import omero.model.IObject;
 import omero.model.UploadJob;
 import omero.model.UploadJobI;
@@ -62,9 +60,17 @@ public class ImportContainer
     private List<Annotation> customAnnotationList;
     private IObject target;
     private String checksumAlgorithm;
+    private ImportConfig config;
 
     public ImportContainer(File file, IObject target, Double[] userPixels,
             String reader, String[] usedFiles, Boolean isSPW) {
+        this(null, file, target, userPixels, reader, usedFiles, isSPW);
+    }
+
+    public ImportContainer(ImportConfig config,
+            File file, IObject target, Double[] userPixels,
+            String reader, String[] usedFiles, Boolean isSPW) {
+        this.config = config;
         this.file = file;
         this.target = target;
         this.userPixels = userPixels;
@@ -265,6 +271,16 @@ public class ImportContainer
         this.checksumAlgorithm = ca;
     }
 
+    public void fillData(ImportSettings settings, Fileset fs,
+            ClientFilePathTransformer sanitizer) throws IOException {
+        fillData(config, settings, fs, sanitizer, null);
+    }
+
+    public void fillData(ImportSettings settings, Fileset fs,
+            ClientFilePathTransformer sanitizer, FileTransfer transfer) throws IOException {
+        fillData(config, settings, fs, sanitizer, transfer);
+    }
+
     public void fillData(ImportConfig config, ImportSettings settings, Fileset fs,
             ClientFilePathTransformer sanitizer) throws IOException {
         fillData(config, settings, fs, sanitizer, null);
@@ -273,12 +289,18 @@ public class ImportContainer
     public void fillData(ImportConfig config, ImportSettings settings, Fileset fs,
             ClientFilePathTransformer sanitizer, FileTransfer transfer) throws IOException {
 
+        if (config == null) {
+            config = new ImportConfig(); // Lazily load
+        }
+
         // TODO: These should possible be a separate option like
-        // ImportUserSettings rather than mis-using ImportContainer.
+        // ImportUserSettings rather than misusing ImportContainer.
         settings.doThumbnails = rbool(getDoThumbnails());
         settings.userSpecifiedTarget = getTarget();
-        settings.userSpecifiedName = rstring(getUserSpecifiedName());
-        settings.userSpecifiedDescription = rstring(getUserSpecifiedDescription());
+        settings.userSpecifiedName = getUserSpecifiedName() == null ? null
+                : rstring(getUserSpecifiedName());
+        settings.userSpecifiedDescription = getUserSpecifiedDescription() == null ? null
+                : rstring(getUserSpecifiedDescription());
         settings.userSpecifiedAnnotationList = getCustomAnnotationList();
 
         if (getUserPixels() != null) {
@@ -313,8 +335,8 @@ public class ImportContainer
         }
 
         // Fill BF info
-        FilesetVersionInfo clientVersionInfo = new FilesetVersionInfoI();
-        clientVersionInfo.setBioformatsReader(rstring(reader));
+        final Map<String, RString> clientVersionInfo = new HashMap<String, RString>();
+        clientVersionInfo.put(ImportConfig.VersionInfo.BIO_FORMATS_READER.key, rstring(reader));
         config.fillVersionInfo(clientVersionInfo);
         UploadJob upload = new UploadJobI();
         upload.setVersionInfo(clientVersionInfo);

@@ -1,7 +1,7 @@
 /*
  * ome.dsl.Property
  *
- *   Copyright 2006 University of Dundee. All rights reserved.
+ *   Copyright 2006-2014 University of Dundee. All rights reserved.
  *   Use is subject to license terms supplied in LICENSE.txt
  */
 
@@ -16,6 +16,7 @@ import java.util.Properties;
 import java.util.Set;
 
 // Third-party libraries
+import com.google.common.collect.ImmutableMap;
 
 // Application-internal dependencies
 
@@ -55,6 +56,8 @@ public abstract class Property { // TODO need to define equality so that two
 
     public final static String FROMPARENT = "from_parent";
 
+    public final static String MAP = "map";
+
     public final static Set<String> FIELDS = new HashSet<String>();
     static {
         FIELDS.add(REQUIRED);
@@ -68,6 +71,7 @@ public abstract class Property { // TODO need to define equality so that two
         FIELDS.add(PARENT);
         FIELDS.add(FROMPARENT);
         FIELDS.add(TOCHILD);
+        FIELDS.add(MAP);
     }
 
     public final static Map<String, Class<? extends Property>> FIELDS2CLASSES = new HashMap<String, Class<? extends Property>>();
@@ -83,6 +87,7 @@ public abstract class Property { // TODO need to define equality so that two
         FIELDS2CLASSES.put(CHILD, ChildLink.class);
         FIELDS2CLASSES.put(FROMPARENT, LinkParent.class);
         FIELDS2CLASSES.put(TOCHILD, LinkChild.class);
+        FIELDS2CLASSES.put(MAP, MapField.class);
     }
 
     // VALUE-Type identifiers
@@ -111,9 +116,11 @@ public abstract class Property { // TODO need to define equality so that two
     public final static String STRINGS2 = "string[][]";
 
     public final static String INTEGERS = "int[]";
-    
+
+    public final static String POSITIVEFLOAT = "PositiveFloat";
+
     public final static String POSITIVEINTEGER = "PositiveInteger";
-    
+
     public final static String NONNEGATIVEINTEGER = "NonNegativeInteger";
 
     public final static String PERCENTFRACTION = "PercentFraction";
@@ -123,6 +130,7 @@ public abstract class Property { // TODO need to define equality so that two
         JAVATYPES.put(STRING, String.class.getName());
         JAVATYPES.put(BOOLEAN, Boolean.class.getName());
         JAVATYPES.put(INTEGER, Integer.class.getName());
+        JAVATYPES.put(POSITIVEFLOAT, Double.class.getName());
         JAVATYPES.put(POSITIVEINTEGER, Integer.class.getName());
         JAVATYPES.put(NONNEGATIVEINTEGER, Integer.class.getName());
         JAVATYPES.put(FLOAT, Float.class.getName());
@@ -138,10 +146,19 @@ public abstract class Property { // TODO need to define equality so that two
         JAVATYPES.put(INTEGERS, INTEGERS);
     }
 
-    public final static Map<String, String> DBTYPES = new HashMap<String, String>();
+    public static final ImmutableMap<String, String> DBTYPES;
+
     static {
-        DBTYPES.putAll(JAVATYPES);
-        DBTYPES.put(TEXT, TEXT);
+        final ImmutableMap.Builder<String, String> dbTypes = ImmutableMap.builder();
+        dbTypes.put("byte[]", "bytea");
+        dbTypes.put("string[]", "text[]");
+        dbTypes.put("string[][]", "text[][]");
+        dbTypes.put(POSITIVEINTEGER, "positive_int");
+        dbTypes.put(NONNEGATIVEINTEGER, "nonnegative_int");
+        dbTypes.put(FLOAT, "double precision");
+        dbTypes.put(POSITIVEFLOAT, "positive_float");
+        dbTypes.put(PERCENTFRACTION, "percent_fraction");
+        DBTYPES = dbTypes.build();
     }
 
     /**
@@ -524,29 +541,12 @@ public abstract class Property { // TODO need to define equality so that two
     }
 
     /**
-     * @return
-     * @see ticket:813
+     * @return the database definition for the property's type, or an empty string
+     * @see ticket:803
      */
     public String getDef() {
-        if (type.equals(FLOAT)) {
-            StringBuilder sb = new StringBuilder(32);
-            sb.append("double precision");
-            if (!getNullable()) {
-                sb.append(" not null");
-            }
-            if (getUnique()) {
-                sb.append(" unique");
-            }
-            return sb.toString();
-        } else if (type.equals("byte[]")) {
-            return "bytea";
-        } else if (type.equals("string[]")) {
-            return "text[]";
-        } else if (type.equals("string[][]")) {
-            return "text[][]";
-        } else {
-            return "";
-        }
+        final String def = DBTYPES.get(type);
+        return def == null ? "" : def;
     }
 
     /**
@@ -834,4 +834,22 @@ class DetailsField extends Property {
     public String getFieldInitializer() {
         return "new Details()";
     }
+}
+
+class MapField extends Property {
+
+    public MapField(SemanticType st, Properties attrs) {
+        super(st, attrs);
+    }
+
+
+    @Override
+    public String getFieldType() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("java.util.Map<String, ");
+        sb.append(getType());
+        sb.append(">");
+        return sb.toString();
+    }
+
 }

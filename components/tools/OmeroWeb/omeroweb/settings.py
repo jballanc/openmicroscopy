@@ -6,7 +6,7 @@
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # 
 # 
-# Copyright (c) 2008-2013 University of Dundee. 
+# Copyright (c) 2008-2014 University of Dundee. 
 # 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -29,7 +29,6 @@
 
 import os.path
 import sys
-import datetime
 import logging
 import omero
 import omero.config
@@ -135,9 +134,11 @@ event = get_event("websettings")
 
 while True:
     try:
-        CONFIG_XML = omero.config.ConfigXml(CONFIG_XML)
-        CUSTOM_SETTINGS = CONFIG_XML.as_map()
-        CONFIG_XML.close()
+        CUSTOM_SETTINGS = dict()
+        if os.path.exists(CONFIG_XML):
+            CONFIG_XML = omero.config.ConfigXml(CONFIG_XML, read_only=True)
+            CUSTOM_SETTINGS = CONFIG_XML.as_map()
+            CONFIG_XML.close()
         break
     except LockException:
         #logger.error("Exception while loading configuration retrying...", exc_info=True)
@@ -163,8 +164,9 @@ DEVELOPMENT = "development"
 DEFAULT_SERVER_TYPE = FASTCGITCP
 ALL_SERVER_TYPES = (FASTCGITCP, FASTCGI, DEVELOPMENT)
 
-DEFAULT_SESSION_ENGINE = 'django.contrib.sessions.backends.file'
-SESSION_ENGINE_VALUES = ('django.contrib.sessions.backends.db',
+DEFAULT_SESSION_ENGINE = 'omeroweb.filesessionstore'
+SESSION_ENGINE_VALUES = ('omeroweb.filesessionstore',
+                         'django.contrib.sessions.backends.db',
                          'django.contrib.sessions.backends.file',
                          'django.contrib.sessions.backends.cache',
                          'django.contrib.sessions.backends.cached_db')
@@ -210,6 +212,7 @@ def leave_none_unset_int(s):
     if s is not None:
         return int(s)
 
+CUSTOM_HOST = CUSTOM_SETTINGS.get("Ice.Default.Host", "localhost")
 CUSTOM_SETTINGS_MAPPINGS = {
     "omero.web.login_logo": ["LOGIN_LOGO", None, leave_none_unset],
     "omero.web.apps": ["ADDITIONAL_APPS", '[]', json.loads],
@@ -231,11 +234,13 @@ CUSTOM_SETTINGS_MAPPINGS = {
     "omero.web.force_script_name": ["FORCE_SCRIPT_NAME", None, leave_none_unset],
     "omero.web.static_url": ["STATIC_URL", "/static/", str],
     "omero.web.staticfile_dirs": ["STATICFILES_DIRS", '[]', json.loads],
-    "omero.web.index_template": ["INDEX_TEMPLATE", None, identity],
     "omero.web.caches": ["CACHES", '{"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}', json.loads],
     "omero.web.webgateway_cache": ["WEBGATEWAY_CACHE", None, leave_none_unset],
     "omero.web.session_engine": ["SESSION_ENGINE", DEFAULT_SESSION_ENGINE, check_session_engine],
+    "omero.web.session_expire_at_browser_close": ["SESSION_EXPIRE_AT_BROWSER_CLOSE", "true", parse_boolean],
+    "omero.web.session_cookie_age": ["SESSION_COOKIE_AGE", 86400, int],
     "omero.web.debug": ["DEBUG", "false", parse_boolean],
+    "omero.upgrades.url": ["UPGRADES_URL", "http://upgrade.openmicroscopy.org.uk/", str],
     "omero.web.email_host": ["EMAIL_HOST", None, identity],
     "omero.web.email_host_password": ["EMAIL_HOST_PASSWORD", None, identity],
     "omero.web.email_host_user": ["EMAIL_HOST_USER", None, identity],
@@ -248,7 +253,7 @@ CUSTOM_SETTINGS_MAPPINGS = {
     "omero.web.login_redirect": ["LOGIN_REDIRECT",'{}', json.loads],
     "omero.web.send_broken_link_emails": ["SEND_BROKEN_LINK_EMAILS", "true", parse_boolean],
     "omero.web.server_email": ["SERVER_EMAIL", None, identity],
-    "omero.web.server_list": ["SERVER_LIST", '[["localhost", 4064, "omero"]]', json.loads],
+    "omero.web.server_list": ["SERVER_LIST", '[["%s", 4064, "omero"]]' % CUSTOM_HOST, json.loads],
     # Configuration options for the viewer. -1: zoom in fully, 0: zoom out fully, unset: zoom to fit window
     "omero.web.viewer.initial_zoom_level": ["VIEWER_INITIAL_ZOOM_LEVEL", None, leave_none_unset_int],
     # the following parameters configure when to show/hide the 'Volume viewer' icon in the Image metadata panel
@@ -261,10 +266,14 @@ CUSTOM_SETTINGS_MAPPINGS = {
             '"/omero/setup_scripts/FLIM_initialise.py", "/omero/import_scripts/Populate_ROI.py"]', parse_paths],
     
     # Add links to the top header: links are ['Link Text', 'link'], where the url is reverse("link") OR simply 'link' (for external urls)
-    "omero.web.ui.top_links": ["TOP_LINKS", '[]', json.loads],  # E.g. '[["Webtest", "webtest_index"]]'
+    "omero.web.ui.top_links": ["TOP_LINKS", '['\
+            '["Data", "webindex", {"title": "Browse Data via Projects, Tags etc"}],'\
+            '["History", "history", {"title": "History"}]'\
+            ']', json.loads],  # E.g. '[["Webtest", "webtest_index"]]'
     
     # Shows/hides users in dropdown menu; default: '{"LEADERS": "Owners", "COLLEAGUES": "Members", "ALL": "All members"}'
     "omero.web.ui.menu.dropdown": ["UI_MENU_DROPDOWN",'{"LEADERS": "Owners", "COLLEAGUES": "Members", "ALL": "All members"}', json.loads],
+    
     
     # Add plugins to the right-hand & center panels: plugins are ['Label', 'include.js', 'div_id']. The javascript loads data into $('#div_id').
     "omero.web.ui.right_plugins": ["RIGHT_PLUGINS", '[["Acquisition", "webclient/data/includes/right_plugin.acquisition.js.html", "metadata_tab"],'\
@@ -281,11 +290,21 @@ CUSTOM_SETTINGS_MAPPINGS = {
     # after testing this line should be removed.
     # "omero.web.application_host": ["APPLICATION_HOST", None, remove_slash], 
 
+    # TEMPLATES
+    # TEMPLATE_DIRS: List of locations of the template source files, in search order. Note that these 
+    # paths should use Unix-style forward slashes, even on Windows.
+    # Put strings here, like "/home/html/django_templates" or "C:/www/django/templates". Always use 
+    # forward slashes, even on Windows. Don't forget to use absolute paths, not relative paths.
+    # TEMPLATE_DIRS = ()
+    "omero.web.template_dirs": ["TEMPLATE_DIRS", '[]', json.loads],
+    "omero.web.index_template": ["INDEX_TEMPLATE", None, identity],
+    
     # WEBSTART
+    "omero.web.webstart_template": ["WEBSTART_TEMPLATE", None, identity],
     "omero.web.webstart_jar": ["WEBSTART_JAR", "omero.insight.jar", str],
     "omero.web.webstart_icon": ["WEBSTART_ICON", "webstart/img/icon-omero-insight.png", str],
     "omero.web.webstart_heap": ["WEBSTART_HEAP", "1024m", str],
-    "omero.web.webstart_host": ["WEBSTART_HOST", "localhost", str],
+    "omero.web.webstart_host": ["WEBSTART_HOST", CUSTOM_HOST, str],
     "omero.web.webstart_port": ["WEBSTART_PORT", "4064", str],
     "omero.web.webstart_class": ["WEBSTART_CLASS", "org.openmicroscopy.shoola.Main", str],
     "omero.web.webstart_title": ["WEBSTART_TITLE", "OMERO.insight", str],
@@ -295,11 +314,32 @@ CUSTOM_SETTINGS_MAPPINGS = {
 
     # Allowed hosts: https://docs.djangoproject.com/en/1.5/ref/settings/#allowed-hosts
     "omero.web.allowed_hosts": ["ALLOWED_HOSTS", '["*"]', json.loads],
+    
+    # PIPELINE 1.3.20
+    # Pipeline is an asset packaging library for Django, providing both CSS and JavaScript 
+    # concatenation and compression, built-in JavaScript template support, and optional 
+    # data-URI image and font embedding.
+    "omero.web.pipeline_js_compressor": ["PIPELINE_JS_COMPRESSOR", None, identity],
+    "omero.web.pipeline_css_compressor": ["PIPELINE_CSS_COMPRESSOR", None, identity],
+    # STATICFILES_STORAGE see http://django-pipeline.readthedocs.org/en/latest/storages.html
+    "omero.web.pipeline_staticfile_storage": ["STATICFILES_STORAGE", "pipeline.storage.PipelineStorage", str],
+
+}
+del CUSTOM_HOST
+
+# DEVELOPMENT_SETTINGS_MAPPINGS - WARNING: For each setting developer MUST open
+# a ticket that needs to be resolved before a release either by moving the
+# setting to CUSTOM_SETTINGS_MAPPINGS or by removing the setting at all.
+DEVELOPMENT_SETTINGS_MAPPINGS = {
+    
+    # Rename Orphans in data manager; default: '{"NAME":"Orphaned images", "DESCRIPTION":"This is a virtual container with orphaned images. These images are not linked anywhere. Just drag them to the selected container."}'
+    "omero.web.ui.tree.orphaned": ["UI_TREE_ORPHANED",'{"NAME":"Orphaned images", "DESCRIPTION":"This is a virtual container with orphaned images. These images are not linked anywhere. Just drag them to the selected container."}', json.loads],
+    "omero.web.webstart_admins_only": ["WEBSTART_ADMINS_ONLY", "false", parse_boolean],
 }
 
-def process_custom_settings(module):
+def process_custom_settings(module, settings='CUSTOM_SETTINGS_MAPPINGS'):
     logging.info('Processing custom settings for module %s' % module.__name__)
-    for key, values in getattr(module, 'CUSTOM_SETTINGS_MAPPINGS', {}).items():
+    for key, values in getattr(module, settings, {}).items():
         # Django may import settings.py more than once, see:
         # http://blog.dscpl.com.au/2010/03/improved-wsgi-script-for-use-with.html
         # In that case, the custom settings have already been processed.
@@ -322,10 +362,11 @@ def process_custom_settings(module):
         except LeaveUnset:
             pass
 
-process_custom_settings(sys.modules[__name__])
+process_custom_settings(sys.modules[__name__], 'CUSTOM_SETTINGS_MAPPINGS')
+process_custom_settings(sys.modules[__name__], 'DEVELOPMENT_SETTINGS_MAPPINGS')
 
 
-if not DEBUG:
+if not DEBUG:  # from CUSTOM_SETTINGS_MAPPINGS  # noqa
     LOGGING['loggers']['django.request']['level'] = 'INFO'
     LOGGING['loggers']['django']['level'] = 'INFO'
     LOGGING['loggers']['']['level'] = 'INFO'
@@ -337,7 +378,7 @@ if not DEBUG:
 # is handled by:
 #    handler404 = "omeroweb.feedback.views.handler404"
 #    handler500 = "omeroweb.feedback.views.handler500"
-TEMPLATE_DEBUG = DEBUG
+TEMPLATE_DEBUG = DEBUG  # from CUSTOM_SETTINGS_MAPPINGS  # noqa
 
 def report_settings(module):
     from django.views.debug import cleanse_setting
@@ -398,7 +439,7 @@ ROOT_URLCONF = 'omeroweb.urls'
 # of each app (using django.contrib.staticfiles.finders.AppDirectoriesFinder)
 STATICFILES_FINDERS = (
     "django.contrib.staticfiles.finders.FileSystemFinder",
-    "django.contrib.staticfiles.finders.AppDirectoriesFinder"
+    "django.contrib.staticfiles.finders.AppDirectoriesFinder",
 )
 
 # STATIC_URL: URL to use when referring to static files located in STATIC_ROOT. 
@@ -416,7 +457,8 @@ STATIC_ROOT = os.path.join(os.path.dirname(__file__), 'static').replace('\\','/'
 # traverse if the FileSystemFinder finder is enabled, e.g. if you use the collectstatic or 
 # findstatic management command or use the static file serving view.
 if WEBSTART:
-    STATICFILES_DIRS += (("webstart/jars", INSIGHT_JARS),)
+    # from CUSTOM_SETTINGS_MAPPINGS
+    STATICFILES_DIRS += (("webstart/jars", INSIGHT_JARS),)  # noqa
 
 # TEMPLATE_CONTEXT_PROCESSORS: A tuple of callables that are used to populate the context 
 # in RequestContext. These callables take a request object as their argument and return 
@@ -438,12 +480,6 @@ TEMPLATE_LOADERS = (
     'django.template.loaders.app_directories.Loader',
 )
 
-# TEMPLATE_DIRS: List of locations of the template source files, in search order. Note that these 
-# paths should use Unix-style forward slashes, even on Windows.
-# Put strings here, like "/home/html/django_templates" or "C:/www/django/templates". Always use 
-# forward slashes, even on Windows. Don't forget to use absolute paths, not relative paths.
-# TEMPLATE_DIRS = ()
-
 # INSTALLED_APPS: A tuple of strings designating all applications that are enabled in this Django 
 # installation. Each string should be a full Python path to a Python package that contains 
 # a Django application, as created by django-admin.py startapp.
@@ -460,12 +496,12 @@ INSTALLED_APPS = (
     'omeroweb.webtest',
     'omeroweb.webredirect',
     'omeroweb.webstart',
-    
+    'pipeline',
 )
 
 # ADDITONAL_APPS: We import any settings.py from apps. This allows them to modify settings.
 # We're also processing any CUSTOM_SETTINGS_MAPPINGS defined there.
-for app in ADDITIONAL_APPS:
+for app in ADDITIONAL_APPS:  # from CUSTOM_SETTINGS_MAPPINGS  # noqa
     # Previously the app was added to INSTALLED_APPS as 'omeroweb.app', which
     # then required the app to reside within or be symlinked from within
     # omeroweb, instead of just having to be somewhere on the python path.
@@ -488,6 +524,66 @@ for app in ADDITIONAL_APPS:
 logger.debug('INSTALLED_APPS=%s' % [INSTALLED_APPS])
 
 
+PIPELINE_CSS = {
+    'webgateway_viewer': {
+        'source_filenames': (
+            'webgateway/css/reset.css',
+            'webgateway/css/ome.body.css',
+            'webclient/css/dusty.css',
+            'webgateway/css/ome.viewport.css',
+            'webgateway/css/ome.gs_slider.css',
+            'webgateway/css/base.css',
+            'webgateway/css/ome.snippet_header_logo.css',
+            'webgateway/css/ome.postit.css',
+            'webgateway/css/ome.rangewidget.css',
+            '3rdparty/farbtastic/farbtastic.css',
+            'webgateway/css/ome.colorbtn.css',
+            '3rdparty/JQuerySpinBtn/JQuerySpinBtn.css',
+            '3rdparty/jquery-ui-1.8.19/jquery-ui-1.8.19.custom.css',
+            'webgateway/css/omero_image.css',
+            '3rdparty/panojs/panojs.css',
+        ),
+        'output_filename': 'omeroweb.viewer.min.css',
+    },
+}
+
+PIPELINE_JS = {
+    'webgateway_viewer': {
+        'source_filenames': (
+            '3rdparty/jquery-1.7.2.js',
+            'webgateway/js/ome.popup.js',
+            '3rdparty/aop.js',
+            '3rdparty/panojs/utils.js',
+            '3rdparty/panojs/PanoJS.js',
+            '3rdparty/panojs/controls.js',
+            '3rdparty/panojs/pyramid_Bisque.js',
+            '3rdparty/panojs/pyramid_imgcnv.js',
+            '3rdparty/panojs/pyramid_Zoomify.js',
+            '3rdparty/panojs/control_thumbnail.js',
+            '3rdparty/panojs/control_info.js',
+            '3rdparty/panojs/control_svg.js',
+            '3rdparty/panojs/control_roi.js',
+            'webgateway/js/ome.gs_utils.js',
+            'webgateway/js/ome.viewportImage.js',
+            'webgateway/js/ome.gs_slider.js',
+            'webgateway/js/ome.viewport.js',
+            '3rdparty/jquery-ui-1.8.19/jquery-ui.min.js',
+            'webgateway/js/ome.smartdialog.js',
+            '3rdparty/JQuerySpinBtn/JQuerySpinBtn.js',
+            'webgateway/js/ome.colorbtn.js',
+            'webgateway/js/ome.postit.js',
+            '3rdparty/jquery.selectboxes.js',
+            'webgateway/js/ome.rangewidget.js',
+            '3rdparty/farbtastic/farbtastic.js',
+            '3rdparty/raphael/raphael-min.js',
+            '3rdparty/raphael/scale.raphael.js',
+            'webgateway/js/ome.roidisplay.js',
+            '3rdparty/jquery.mousewheel.js',
+        ),
+        'output_filename': 'omeroweb.viewer.min.js',
+    }
+}
+
 # FEEDBACK_URL: Used in feedback.sendfeedback.SendFeedback class in order to submit 
 # error or comment messages to https://qa.openmicroscopy.org.
 FEEDBACK_URL = "http://qa.openmicroscopy.org.uk"
@@ -502,12 +598,6 @@ FEEDBACK_APP = 6
 # will store session data. When the default value (None) is used, Django will use the standard temporary 
 # directory for the system.
 SESSION_FILE_PATH = tempfile.gettempdir()
-
-# SESSION_EXPIRE_AT_BROWSER_CLOSE: Whether to expire the session when the user closes his or her browser.
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True # False
-
-# SESSION_COOKIE_AGE: The age of session cookies, in seconds. See How to use sessions.
-SESSION_COOKIE_AGE = 86400 # 1 day in sec (86400)
 
 # FILE_UPLOAD_TEMP_DIR: The directory to store data temporarily while uploading files.
 FILE_UPLOAD_TEMP_DIR = tempfile.gettempdir()
@@ -526,11 +616,11 @@ DEFAULT_USER = os.path.join(os.path.dirname(__file__), 'webgateway', 'static', '
 
 # MANAGERS: A tuple in the same format as ADMINS that specifies who should get broken-link notifications when 
 # SEND_BROKEN_LINK_EMAILS=True.
-MANAGERS = ADMINS
+MANAGERS = ADMINS  # from CUSTOM_SETTINGS_MAPPINGS  # noqa
 
 # PAGE: Used in varous locations where large number of data is retrieved from the server.
 try:
-    PAGE
+    PAGE  # noqa
 except:
     PAGE = 200
 
@@ -560,7 +650,7 @@ SESSION_SERIALIZER = 'django.contrib.sessions.serializers.PickleSerializer'
 # Load server list and freeze 
 from connector import Server
 def load_server_list():
-    for s in SERVER_LIST:
+    for s in SERVER_LIST:  # from CUSTOM_SETTINGS_MAPPINGS  # noqa
         server = (len(s) > 2) and unicode(s[2]) or None
         Server(host=unicode(s[0]), port=int(s[1]), server=server)
     Server.freeze()

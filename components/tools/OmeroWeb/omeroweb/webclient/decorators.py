@@ -27,13 +27,9 @@ import logging
 
 import omeroweb.decorators
 
-from django.http import HttpResponse, HttpResponseServerError, Http404
-from django.utils.http import urlencode
+from django.http import HttpResponse
 from django.conf import settings
 from django.core.urlresolvers import reverse
-
-from omeroweb.webgateway import views as webgateway_views
-from omeroweb.connector import Server
 
 from omeroweb.webclient.forms import GlobalSearchForm
 
@@ -118,8 +114,10 @@ class render_response(omeroweb.decorators.render_response):
         context['ome']['active_group'] = request.session.get('active_group', conn.getEventContext().groupId)
         context['global_search_form'] = GlobalSearchForm()
         
-        if settings.WEBSTART:
-            context['ome']['insight_url'] = request.build_absolute_uri(reverse("webstart_insight"))
+        if settings.WEBSTART and (not settings.WEBSTART_ADMINS_ONLY \
+            or (conn.isAdmin() or (settings.WEBSTART_ADMINS_ONLY and len(list(conn.listOwnedGroups())) > 0))):
+            
+            context['insight_url'] = request.build_absolute_uri(reverse("webstart_insight"))
         self.load_settings(request, context, conn)
 
 
@@ -133,14 +131,20 @@ class render_response(omeroweb.decorators.render_response):
         top_links = settings.TOP_LINKS
         links = []
         for tl in top_links:
-            label = tl[0]
+            if len(tl) < 2:
+                continue;
+            l = {}
+            l["label"] = tl[0]
             link_id = tl[1]
             try:
-                link = reverse(link_id)
-                links.append( {"label":label, "link":link} )
+                l["link"] = reverse(link_id)
             except:
                 # assume we've been passed a url
-                links.append( {"label":label, "link":link_id} )
+                l["link"] = link_id
+            # simply add optional attrs dict
+            if len(tl) > 2:
+                l['attrs'] = tl[2]
+            links.append(l)
         context['ome']['top_links'] = links
 
         right_plugins = settings.RIGHT_PLUGINS

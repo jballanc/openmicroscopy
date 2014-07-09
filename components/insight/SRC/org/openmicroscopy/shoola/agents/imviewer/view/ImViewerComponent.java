@@ -767,6 +767,14 @@ class ImViewerComponent
 	 */
 	public boolean isZoomFitToWindow() { return model.isZoomFitToWindow(); }
 
+	/**
+         * Implemented as specified by the {@link ImViewer} interface.
+         * @see ImViewer#isRendererLoaded()
+         */
+	public boolean isRendererLoaded() {
+	    return model.isRendererLoaded();
+	}
+	
 	/** 
 	 * Implemented as specified by the {@link ImViewer} interface.
 	 * @see ImViewer#setColorModel(int)
@@ -876,7 +884,7 @@ class ImViewerComponent
 		Rectangle r2 = new Rectangle(
 				transformRegion.x, transformRegion.y, r.width, r.height);
 		if (reset) {
-			model.fireBirdEyeViewRetrieval();
+			model.fireBirdEyeViewRetrieval(true);
 			model.resetTiles();
 			model.getBrowser().setSelectedRegion(r2);
 		} else {
@@ -2271,6 +2279,14 @@ class ImViewerComponent
 
 	/** 
 	 * Implemented as specified by the {@link ImViewer} interface.
+	 * @see ImViewer#reloadRenderingThumbs()
+	 */
+	public void reloadRenderingThumbs() {
+	    model.reloadRenderingThumbs();
+	}
+	
+	/** 
+	 * Implemented as specified by the {@link ImViewer} interface.
 	 * @see ImViewer#hasSettingsToPaste()
 	 */
 	public boolean hasSettingsToPaste()
@@ -2766,7 +2782,7 @@ class ImViewerComponent
 		int index = view.getUICompressionLevel();
 		if (old == index) return;
 		view.setCompressionLevel(index);
-		if (!model.isBigImage())
+		if (!model.isLargePlane())
 			ImViewerFactory.setCompressionLevel(index);
 		renderXYPlane();
 	}
@@ -2912,7 +2928,7 @@ class ImViewerComponent
 			if (model.isBigImage()) {
 				view.setCompressionLevel(ToolBar.LOW);
 				view.resetCompressionLevel(view.convertCompressionLevel());
-				model.fireBirdEyeViewRetrieval();
+				model.fireBirdEyeViewRetrieval(true);
 				fireStateChange();
 				return;
 			}
@@ -3134,7 +3150,7 @@ class ImViewerComponent
 			default:
 				controller.setPreferences();
 				//tmp store compression
-				if (!model.isBigImage())
+				if (!model.isLargePlane())
 				ImViewerFactory.setCompressionLevel(
 						view.getUICompressionLevel());
 				if (!saveOnClose(notifyUser)) {
@@ -3266,7 +3282,7 @@ class ImViewerComponent
 	 * Implemented as specified by the {@link ImViewer} interface.
 	 * @see ImViewer#setBirdEyeView(Object)
 	 */
-	public void setBirdEyeView(BufferedImage image)
+	public void setBirdEyeView(BufferedImage image, boolean scaled)
 	{
 		switch (model.getState()) {
 			case LOADING_BIRD_EYE_VIEW:
@@ -3275,10 +3291,13 @@ class ImViewerComponent
 					buildView();
 					set = true;
 				}
-				model.setBirdEyeView(image);
+				model.setBirdEyeView(image, scaled);
 				if (set)
 					controller.setZoomFactor(model.getSelectedResolutionLevel());
+				return;
 		}
+		
+		model.setBirdEyeView(image, scaled);
 	}
 	
 	/** 

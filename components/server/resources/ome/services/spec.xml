@@ -5,7 +5,7 @@
 #
 # $Id$
 #
-# Copyright 2010 Glencoe Software, Inc. All rights reserved.
+# Copyright 2010-2014 Glencoe Software, Inc. All rights reserved.
 # Use is subject to license terms supplied in LICENSE.txt
 #
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -35,7 +35,7 @@
         <property name="extendedMetadata" ref="extendedMetadata"/>
     </bean>
 
-   <!-- SPECIFCATIONS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+   <!-- SPECIFICATIONS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
 
     <bean name="fileNamespaces" class="java.util.HashMap">
         <constructor-arg>
@@ -56,6 +56,7 @@
                <value>/TypeAnnotation</value>
                <value>/ListAnnotation</value>
                <value>/XmlAnnotation</value>
+               <value>/MapAnnotation</value>
                <value>/TagAnnotation</value>
                <value>/CommentAnnotation</value>
                <value>/TextAnnotation</value>
@@ -261,9 +262,9 @@
             <list>
                 <value>/Fileset/FilesetEntry</value>
                 <value>/OriginalFile;HARD;/Fileset/FilesetEntry</value>
+                <value>/OriginalFile;HARD;/Fileset/FilesetJobLink/Job/JobOriginalFileLink</value>
                 <value>/Fileset/FilesetJobLink</value>
                 <value>/Fileset/FilesetJobLink/Job;NULL</value>
-                <value>/Fileset/FilesetJobLink/Job/FilesetVersionInfo</value>
                 <value>/Fileset/FilesetAnnotationLink</value>
                 <value>/Annotation;SOFT;/Fileset/FilesetAnnotationLink</value>
                 <value>/Fileset+Only</value>

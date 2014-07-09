@@ -13,7 +13,7 @@
 #
 # Author: Carlos Neves <carlos(at)glencoesoftware.com>
 
-from django.conf.urls import *
+from django.conf.urls import url, patterns
 
 webgateway = url( r'^$', 'webgateway.views.index', name="webgateway" )
 """
@@ -274,13 +274,20 @@ Copy the rendering settings from one image to a list of images, specified in req
 by 'fromid' and list of 'toids'. See L{views.copy_image_rdef_json}
 """
 
+apply_owners_rdef_json = (r'^applyOwnersRDef/$', 'webgateway.views.apply_owners_rdef_json')
+"""
+Apply the owner's rendering settings to the specified objects.
+"""
+
 webgateway_su = url(r'^su/(?P<user>[^/]+)/$', 'webgateway.views.su', name="webgateway_su")
 """
 Admin method to switch to the specified user, identified by username: <user> 
 Returns 'true' if switch went OK.
 """
 
-archived_files = url( r'^archived_files/download/(?P<iid>[0-9]+)/$', 'webgateway.views.archived_files', name="archived_files" )
+download_as = url( r'^download_as/(?:(?P<iid>[0-9]+)/)?$', 'webgateway.views.download_as', name="download_as" )
+
+archived_files = url( r'^archived_files/download/(?:(?P<iid>[0-9]+)/)?$', 'webgateway.views.archived_files', name="archived_files" )
 """
 This url will download the Original Image File(s) archived at import time. If it's a single file, this will be
 downloaded directly. For multiple files, they are assembled into a zip file on the fly, and this is downloaded.
@@ -323,6 +330,8 @@ urlpatterns = patterns('',
     reset_image_rdef_json,
     list_compatible_imgs_json,
     copy_image_rdef_json,
+    apply_owners_rdef_json,
+    download_as,
     # download archived_files
     archived_files,
     original_file_paths,

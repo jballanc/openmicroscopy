@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2012-2013 Glencoe Software, Inc. All rights reserved.
+ * Copyright (C) 2012-2014 Glencoe Software, Inc. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,32 +20,46 @@ package ome.services.blitz.repo;
 
 import static omero.rtypes.rstring;
 
+import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.text.DateFormatSymbols;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import loci.formats.FormatReader;
 
-import ome.api.local.LocalAdmin;
+import ome.api.IAdmin;
+import ome.api.IUpdate;
+import ome.conditions.ApiUsageException;
 import ome.formats.importer.ImportConfig;
 import ome.formats.importer.ImportContainer;
+import ome.model.core.OriginalFile;
+import ome.model.meta.Experimenter;
 import ome.services.blitz.gateway.services.util.ServiceUtilities;
 import ome.services.blitz.repo.path.ClientFilePathTransformer;
 import ome.services.blitz.repo.path.FilePathNamingValidator;
 import ome.services.blitz.repo.path.FilePathRestrictionInstance;
 import ome.services.blitz.repo.path.FsFile;
 import ome.services.blitz.util.ChecksumAlgorithmMapper;
+import ome.services.util.SleepTimer;
+import ome.system.Roles;
 import ome.system.ServiceFactory;
 import ome.util.SqlAction;
 import ome.util.checksum.ChecksumProviderFactory;
 import ome.util.checksum.ChecksumProviderFactoryImpl;
+import omero.RString;
 import omero.ResourceError;
 import omero.ServerError;
 import omero.grid.ImportLocation;
@@ -58,8 +72,6 @@ import omero.model.Fileset;
 import omero.model.FilesetEntry;
 import omero.model.FilesetI;
 import omero.model.FilesetJobLink;
-import omero.model.FilesetVersionInfo;
-import omero.model.FilesetVersionInfoI;
 import omero.model.IndexingJobI;
 import omero.model.Job;
 import omero.model.MetadataImportJob;
@@ -71,16 +83,19 @@ import omero.model.UploadJob;
 import omero.sys.EventContext;
 import omero.util.IceMapper;
 
-import org.apache.commons.lang.text.StrLookup;
-import org.apache.commons.lang.text.StrSubstitutor;
+import org.apache.commons.lang.StringUtils;
 import org.hibernate.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Function;
 import com.google.common.base.Joiner;
+import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
 import com.google.common.collect.Collections2;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Ordering;
 
 import Ice.Current;
 
@@ -97,16 +112,16 @@ public class ManagedRepositoryI extends PublicRepositoryI
     implements _ManagedRepositoryOperations {
 
     private final static Logger log = LoggerFactory.getLogger(ManagedRepositoryI.class);
-    
+
     private final static int parentDirsToRetain = 3;
-    
+
     /* This class is used in the server-side creation of import containers.
      * The suggestImportPaths method sanitizes the paths in due course.
      * From the server side, we cannot imitate ImportLibrary.createImport
      * in applying client-side specifics to clean up the path. */
     private static final ClientFilePathTransformer nopClientTransformer =
             new ClientFilePathTransformer(new Function<String, String>() {
-                // @Override  since JDK6
+                @Override
                 public String apply(String from) {
                     return from;
                 }
@@ -122,9 +137,18 @@ public class ManagedRepositoryI extends PublicRepositoryI
 
     private final FilePathNamingValidator filePathNamingValidator;
 
-    private final String template;
+    /* template paths: matches any special expansion term */
+    private static final Pattern TEMPLATE_TERM = Pattern.compile("%([a-zA-Z]+)(:([^%/]+))?%");
+
+    /* template paths: the root and user portions separately, never null */
+    /*private final*/ protected FsFile templateRoot;  /* exposed for unit testing only */
+    private final FsFile templateUser;
 
     private final ProcessContainer processes;
+
+    private final String rootSessionUuid;
+
+    private final long userGroupId;
 
     /**
      * Creates a {@link ProcessContainer} internally that will not be managed
@@ -134,19 +158,37 @@ public class ManagedRepositoryI extends PublicRepositoryI
      */
     public ManagedRepositoryI(String template, RepositoryDao dao) throws Exception {
         this(template, dao, new ProcessContainer(), new ChecksumProviderFactoryImpl(),
-                ALL_CHECKSUM_ALGORITHMS, FilePathRestrictionInstance.UNIX_REQUIRED.name);
+                ALL_CHECKSUM_ALGORITHMS, FilePathRestrictionInstance.UNIX_REQUIRED.name, null, new Roles());
     }
 
     public ManagedRepositoryI(String template, RepositoryDao dao,
             ProcessContainer processes,
             ChecksumProviderFactory checksumProviderFactory,
             String checksumAlgorithmSupported,
-            String pathRules) throws Exception {
+            String pathRules,
+            String rootSessionUuid,
+            Roles roles) throws ServerError {
         super(dao, checksumProviderFactory, checksumAlgorithmSupported, pathRules);
-        this.template = template;
+
+        int splitPoint = template.lastIndexOf("//");
+        if (splitPoint < 0) {
+            /* without "//" the whole path is user-owned */
+            splitPoint = 0;
+        }
+
+        this.templateRoot = new FsFile(template.substring(0, splitPoint));
+        this.templateUser = new FsFile(template.substring(splitPoint));
+
+        if (FsFile.emptyPath.equals(templateUser)) {
+            throw new omero.ApiUsageException(null, null,
+                    "no user-owned directories in managed repository template path");
+        }
+
         this.processes = processes;
         this.filePathNamingValidator = new FilePathNamingValidator(this.filePathRestrictions);
-        log.info("Repository template: " + this.template);
+        this.rootSessionUuid = rootSessionUuid;
+        this.userGroupId = roles.getUserGroupId();
+        log.info("Repository template: " + template);
     }
 
     @Override
@@ -162,7 +204,27 @@ public class ManagedRepositoryI extends PublicRepositoryI
      * Return a template based directory path. The path will be created
      * by calling {@link #makeDir(String, boolean, Ice.Current)}.
      */
+    public ImportProcessPrx uploadFileset(Fileset fs, ImportSettings settings,
+            Ice.Current __current) throws omero.ServerError {
+
+        ImportLocation location = internalImport(fs, settings, __current);
+        return createUploadProcess(fs, location, settings, __current, true);
+
+    }
+
+    /**
+     * Return a template based directory path. The path will be created
+     * by calling {@link #makeDir(String, boolean, Ice.Current)}.
+     */
     public ImportProcessPrx importFileset(Fileset fs, ImportSettings settings,
+            Ice.Current __current) throws omero.ServerError {
+
+        ImportLocation location = internalImport(fs, settings, __current);
+        return createImportProcess(fs, location, settings, __current);
+
+    }
+
+    private ImportLocation internalImport(Fileset fs, ImportSettings settings,
             Ice.Current __current) throws omero.ServerError {
 
         if (fs == null || fs.sizeOfUsedFiles() < 1) {
@@ -181,26 +243,22 @@ public class ManagedRepositoryI extends PublicRepositoryI
             paths.add(new FsFile(entry.getClientPath().getValue()));
         }
 
-        // This is the first part of the string which comes after:
-        // ManagedRepository/, e.g. %user%/%year%/etc.
-        final EventContext ec = repositoryDao.getEventContext(__current);
-        final FsFile relPath = new FsFile(expandTemplate(template, ec));
-        // at this point, relPath should not yet exist on the filesystem
-        createTemplateDir(relPath, __current);
+        // at this point, the template path should not yet exist on the filesystem
+        final List<FsFile> sortedPaths = Ordering.usingToString().immutableSortedCopy(paths);
+        final FsFile relPath = createTemplatePath(sortedPaths, __current);
         fs.setTemplatePrefix(rstring(relPath.toString() + FsFile.separatorChar));
 
         final Class<? extends FormatReader> readerClass = getReaderClass(fs, __current);
-        
+
         // The next part of the string which is chosen by the user:
         // /home/bob/myStuff
         FsFile basePath = commonRoot(paths);
 
         // If any two files clash in that chosen basePath directory, then
         // we want to suggest a similar alternative.
-        ImportLocation location =
-                suggestImportPaths(relPath, basePath, paths, readerClass, settings.checksumAlgorithm, __current);
+        return suggestImportPaths(relPath, basePath, paths, readerClass,
+                settings.checksumAlgorithm, __current);
 
-        return createImportProcess(fs, location, settings, __current);
     }
 
     public ImportProcessPrx importPaths(List<String> paths,
@@ -289,8 +347,7 @@ public class ManagedRepositoryI extends PublicRepositoryI
 
         // Initialization version info
         final ImportConfig config = new ImportConfig();
-        final FilesetVersionInfo serverVersionInfo = new FilesetVersionInfoI();
-        serverVersionInfo.setBioformatsReader(rstring("Unknown"));
+        final Map<String, RString> serverVersionInfo = new HashMap<String, RString>();
         config.fillVersionInfo(serverVersionInfo);
 
         // Create and validate jobs
@@ -324,6 +381,25 @@ public class ManagedRepositoryI extends PublicRepositoryI
 
         fs.linkJob(new IndexingJobI());
 
+        if (location instanceof ManagedImportLocationI) {
+            OriginalFile of = ((ManagedImportLocationI) location).getLogFile().asOriginalFile(IMPORT_LOG_MIMETYPE);
+            of = persistLogFile(of, __current);
+            job.linkOriginalFile((omero.model.OriginalFile) new IceMapper().map(of));
+        }
+
+        return createUploadProcess(fs, location, settings, __current, false);
+    }
+
+    /**
+     * Creating the process will register itself in an appropriate
+     * container (i.e. a SessionI or similar) for the current
+     * user and therefore this instance no longer needs to worry
+     * about the maintenance of the object.
+     */
+    protected ImportProcessPrx createUploadProcess(Fileset fs,
+            ImportLocation location, ImportSettings settings,
+            Current __current, boolean uploadOnly) throws ServerError {
+
         // Create CheckedPath objects for use by saveFileset
         final int size = fs.sizeOfUsedFiles();
         final List<CheckedPath> checked = new ArrayList<CheckedPath>();
@@ -336,8 +412,8 @@ public class ManagedRepositoryI extends PublicRepositoryI
         // Since the fileset saved validly, we create a session for the user
         // and return the process.
 
-        final ManagedImportProcessI proc = new ManagedImportProcessI(this, managedFs,
-                location, settings, __current);
+        final ManagedImportProcessI proc = new ManagedImportProcessI(this,
+                managedFs, location, settings, __current);
         processes.addProcess(proc);
         return proc.getProxy();
     }
@@ -351,12 +427,19 @@ public class ManagedRepositoryI extends PublicRepositoryI
     protected Class<? extends FormatReader> getReaderClass(Fileset fs, Current __current) {
         for (final Job job : fs.linkedJobList()) {
             if (job instanceof UploadJob) {
-                final FilesetVersionInfo versionInfo = ((UploadJob) job).getVersionInfo(__current);
-                final String readerName = versionInfo.getBioformatsReader(__current).getValue();
-                final Class<?> potentialReaderClass;
+                final Map<String, RString> versionInfo = ((UploadJob) job).getVersionInfo(__current);
+                if (versionInfo == null || !versionInfo.containsKey(ImportConfig.VersionInfo.BIO_FORMATS_READER.key)) {
+                    continue;
+                }
+                final String readerName = versionInfo.get(ImportConfig.VersionInfo.BIO_FORMATS_READER.key).getValue();
+                Class<?> potentialReaderClass;
                 try {
                     potentialReaderClass = Class.forName(readerName);
-                } catch (ClassNotFoundException e) {
+                } catch (NullPointerException npe) {
+                    log.debug("No info provided for reader class");
+                    continue;
+                } catch (Exception e) {
+                    log.warn("Error getting reader class", e);
                     continue;
                 }
                 if (FormatReader.class.isAssignableFrom(potentialReaderClass)) {
@@ -400,90 +483,777 @@ public class ManagedRepositoryI extends PublicRepositoryI
     }
 
     /**
-     * Turn the current template into a relative path. Makes use of the data
-     * returned by {@link #replacementMap(Ice.Current)}.
-     *
-     * @param curr
-     * @return
+     * Manages the expansion of template paths. Expected to be superseded by a more general approach.
+     * @author m.t.b.carroll@dundee.ac.uk
+     * @since 5.0.3
      */
-    protected String expandTemplate(final String template, EventContext ec) {
+    private class TemplateDirectoryCreator {
+        private final Calendar now = Calendar.getInstance();
+        private final EventContext ctx;
+        private final Object consistentData;
+        private final boolean createDirectories;
+        private final Ice.Current current;
+        private final ServiceFactory sf;
+        private final Deque<String> remaining;
+        private final List<String> done;
 
-        if (template == null) {
-            return ""; // EARLY EXIT.
+        /**
+         * Prepare to expand a template path.
+         * @param base the pre-existing parent directories in the repository
+         * @param todo the template path to expand
+         * @param ctx the context to apply in expanding the template path
+         * @param consistentData the data from which to calculate a consistent hash
+         * @param createDirectories if this instance should create the template path on the file-system
+         * @param current the method invocation context in which to perform queries and create directories
+         * {@code null} to omit actual directory creation
+         */
+        TemplateDirectoryCreator(FsFile base, FsFile todo, final EventContext ctx, final Object consistentData,
+                boolean createDirectories, Current current) {
+            this.ctx = ctx;
+            this.consistentData = consistentData;
+            this.createDirectories = createDirectories;
+            this.current = current;
+            this.sf = null;
+            this.remaining = new ArrayDeque<String>(todo.getComponents());
+            this.done = new ArrayList<String>(base.getComponents());
         }
 
-        final Map<String, String> map = replacementMap(ec);
-        final StrSubstitutor strSubstitutor = new StrSubstitutor(
-                new StrLookup() {
-                    @Override
-                    public String lookup(final String key) {
-                        return map.get(key);
+        /**
+         * Prepare to expand a template path.
+         * @param base the pre-existing parent directories in the repository
+         * @param todo the template path to expand
+         * @param ctx the context to apply in expanding the template path
+         * @param consistentData the data from which to calculate a consistent hash
+         * @param createDirectories if this instance should create the template path on the file-system
+         * (must be {@code false} for this constructor)
+         * @param sf the service factory which to perform queries
+         * {@code null} to omit actual directory creation
+         */
+        TemplateDirectoryCreator(FsFile base, FsFile todo, final EventContext ctx, final Object consistentData,
+                boolean createDirectories, ServiceFactory sf) {
+            if (createDirectories) {
+                throw new ApiUsageException("may not create directories with only a service factory");
+            }
+            this.ctx = ctx;
+            this.consistentData = consistentData;
+            this.createDirectories = createDirectories;
+            this.current = null;
+            this.sf = sf;
+            this.remaining = new ArrayDeque<String>(todo.getComponents());
+            this.done = new ArrayList<String>(base.getComponents());
+        }
+
+        /**
+         * Expand {@code %user%} to the user's name.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandUser(String prefix, String suffix) {
+            return prefix + ctx.userName + suffix;
+        }
+
+        /**
+         * Expand {@code %userid%} to the user's ID.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandUserId(String prefix, String suffix) {
+            return prefix + ctx.userId + suffix;
+        }
+
+        /**
+         * Expand {@code %group%} to the group's name.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandGroup(String prefix, String suffix) {
+            return prefix + ctx.groupName + suffix;
+        }
+
+        /**
+         * Expand {@code %groupid%} to the group's ID.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandGroupId(String prefix, String suffix) {
+            return prefix + ctx.groupId + suffix;
+        }
+
+        /**
+         * Expand {@code %year%} to the current year.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandYear(String prefix, String suffix) {
+            return prefix + now.get(Calendar.YEAR) + suffix;
+        }
+
+        /**
+         * Expand {@code %month%} to the current month number.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandMonth(String prefix, String suffix) {
+            return prefix + String.format("%02d", now.get(Calendar.MONTH) + 1) + suffix;
+        }
+
+        /**
+         * Expand {@code %monthname%} to the current month name.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandMonthname(String prefix, String suffix) {
+            return prefix + DATE_FORMAT.getMonths()[now.get(Calendar.MONTH)] + suffix;
+        }
+
+        /**
+         * Expand {@code %day%} to the current day number in the month.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandDay(String prefix, String suffix) {
+            return prefix + String.format("%02d", now.get(Calendar.DAY_OF_MONTH)) + suffix;
+        }
+
+        /**
+         * Expand {@code %time%} to the current hour, minute, second and millisecond.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         * @throws ServerError if the directory could not be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandTime(String prefix, String suffix) {
+            final String time = String.format("%02d-%02d-%02d.%03d",
+                    now.get(Calendar.HOUR_OF_DAY),
+                    now.get(Calendar.MINUTE),
+                    now.get(Calendar.SECOND),
+                    now.get(Calendar.MILLISECOND));
+            return prefix + time + suffix;
+        }
+
+        /**
+         * Expand {@code %session%} to the session's UUID.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandSession(String prefix, String suffix) {
+            return prefix + ctx.sessionUuid + suffix;
+        }
+
+        /**
+         * Expand {@code %sessionid%} to the session's ID.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandSessionId(String prefix, String suffix) {
+            return prefix + ctx.sessionId + suffix;
+        }
+
+        /**
+         * Expand {@code %perms%} to the group's permissions.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandPerms(String prefix, String suffix) {
+            return prefix + ctx.groupPermissions + suffix;
+        }
+
+        /**
+         * Expand {@code %institution%} to the user's institution, omitting this component if they do not have one.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandInstitution(String prefix, String suffix) {
+            final String institution;
+            if (current != null) {
+                institution = repositoryDao.getUserInstitution(ctx.userId, current);
+            } else {
+                institution = repositoryDao.getUserInstitution(ctx.userId, sf);
+            }
+            if (StringUtils.isBlank(institution)) {
+                return null;
+            } else {
+                return prefix + serverPaths.getPathSanitizer().apply(institution) + suffix;
+            }
+        }
+
+        /**
+         * Expand {@code %institution%} to the user's institution, using a default if they do not have one.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @param defaultForNone the string to use as the institution of users who do not have one set for them
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandInstitution(String prefix, String suffix, String defaultForNone) {
+            String institution;
+            if (current != null) {
+                institution = repositoryDao.getUserInstitution(ctx.userId, current);
+            } else {
+                institution = repositoryDao.getUserInstitution(ctx.userId, sf);
+            }
+            if (StringUtils.isBlank(institution)) {
+                institution = defaultForNone;
+            }
+            return prefix + serverPaths.getPathSanitizer().apply(institution) + suffix;
+        }
+
+        /**
+         * Expand {@code %hash%} to a consistent hash of eight hexadecimal digits.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         * @throws ServerError if the expansion term was improperly specified
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandHash(String prefix, String suffix) throws ServerError {
+            return expandHash(prefix, suffix, "8");
+        }
+
+        /**
+         * Expand {@code %hash%} to a consistent hash of the given number of hexadecimal digits.
+         * Further comma-separated digits use more of the hash in subdirectories.
+         * @param prefix path component text preceding the expansion term in the first directory, may be empty
+         * @param suffix path component text following the expansion term in the first directory, may be empty
+         * @param parameters a comma-separated list of how many hexadecimal digits of the hash to use in each directory
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         * @throws ServerError if the expansion term was improperly specified
+         */
+        // @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandHash(String prefix, String suffix, String parameters) throws ServerError {
+            if (consistentData == null) {
+                throw new ServerError(null, null, "%hash% is prohibited in this part of the repository template path");
+            }
+            /* simple zero-padding regardless of the hash code's sign */
+            final String hash = Long.toHexString(0x200000000l + consistentData.hashCode()).substring(1).toUpperCase();
+            final Deque<String> components = new ArrayDeque<String>();
+            int currentPosition = 0;
+            for (final String digitCount : Splitter.on(',').split(parameters)) {
+                final int length = Integer.parseInt(digitCount);
+                if (length < 1 || length + currentPosition > hash.length()) {
+                    throw new ServerError(null, null,
+                            "invalid parameters \"" + parameters + "\" for %hash% in the repository template path");
+                }
+                components.push(prefix + hash.substring(currentPosition, currentPosition + length) + suffix);
+                currentPosition += length;
+                /* apply prefix and suffix to first directory only */
+                prefix = "";
+                suffix = "";
+            }
+            while (!components.isEmpty()) {
+                remaining.push(components.pop());
+            }
+            return null;
+        }
+
+        /**
+         * Get the full repository path for the given increment.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @param padding the minimum number of digits for the natural number, achieved by zero-padding if necessary
+         * @param count the natural number that identifies the unique directory
+         * @return the full repository path
+         */
+        private String getIncrementRepositoryPath(String prefix, String suffix, int padding, int count) {
+            final List<String> path = new ArrayList<String>(done.size() + 1);
+            path.addAll(done);
+            path.add(prefix + Strings.padStart(Integer.toString(count), padding, '0') + suffix);
+            return Joiner.on(FsFile.separatorChar).join(path);
+        }
+
+        /**
+         * Expand {@code %increment%} to a uniquely named directory, counting by natural numbers.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         * @throws ServerError if the directory could not be created or the expansion term was improperly specified
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandIncrement(String prefix, String suffix) throws ServerError {
+            return expandIncrement(prefix, suffix, "0");
+        }
+
+        /* note latest components with %increment% to assure progress in term expansion */
+        private Set<String> skippedIncrementComponents = new HashSet<String>();
+
+        /**
+         * Expand {@code %increment%} to a uniquely named directory, counting by natural numbers.
+         * @param prefix path component text preceding the expansion term, may be empty
+         * @param suffix path component text following the expansion term, may be empty
+         * @param paddingString the minimum number of digits for the natural number, achieved by zero-padding if necessary
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         * @throws ServerError if the directory could not be created or the expansion term was improperly specified
+         */
+        // @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandIncrement(String prefix, String suffix, String paddingString) throws ServerError {
+            if (!createDirectories) {
+                throw new ServerError(null, null,
+                        "%increment% is prohibited among the root-owned directories in the repository template path");
+            }
+            if (TEMPLATE_TERM.matcher(prefix).matches() || TEMPLATE_TERM.matcher(suffix).matches()) {
+                /* there is another term yet to be expanded before this expansion is attempted */
+                final String component = prefix + "%increment:" + paddingString + '%' + suffix;
+                if (skippedIncrementComponents.add(component)) {
+                    /* this is the first try at expanding this term */
+                    return component;
+                } else {
+                    /* this is not the first try at expanding this term, could be an infinite loop */
+                    throw new ServerError(null, null,
+                            "%increment% may not be arbitrarily combined with other expansions " +
+                            "in the same repository template path component, as in \"" + component + '"');
+                }
+            } else {
+                /* useful progress is ahead, so no infinite loop at this point */
+                skippedIncrementComponents.clear();
+            }
+            final int padding = Integer.parseInt(paddingString);
+            /* pinpoint next increment with binary search */
+            Integer inclusiveLower = null;
+            Integer exclusiveHigher = null;
+            int count;
+            while (true) {
+                final int toProbe;
+                if (inclusiveLower == null) {
+                    /* no bounds yet */
+                    toProbe = 1;
+                    final String path = getIncrementRepositoryPath(prefix, suffix, padding, toProbe);
+                    if (checkPath(path, null, current).exists()) {
+                        /* found a lower bound */
+                        inclusiveLower = toProbe;
+                    } else {
+                        /* create the first of the directories */
+                        count = toProbe;
+                        break;
                     }
-                }, "%", "%", '%');
-        return strSubstitutor.replace(template);
-    }
-
-    /**
-     * Generates a map with most of the fields (as strings) from the
-     * {@link EventContext} for the current user as well as fields from
-     * a current {@link Calendar} instance. Implementors need only
-     * provide the fields that are used in their templates. Any keys that
-     * cannot be found by {@link #expandeTemplate(String, Ice.Current)} will
-     * remain untouched.
-     *
-     * @param curr
-     * @return
-     */
-    protected Map<String, String> replacementMap(EventContext ec) {
-        final Map<String, String> map = new HashMap<String, String>();
-        final Calendar now = Calendar.getInstance();
-        map.put("user", ec.userName);
-        map.put("userId", Long.toString(ec.userId));
-        map.put("group", ec.groupName);
-        map.put("groupId", Long.toString(ec.groupId));
-        map.put("year", Integer.toString(now.get(Calendar.YEAR)));
-        map.put("month", String.format("%02d", now.get(Calendar.MONTH)+1));
-        map.put("monthname", DATE_FORMAT.getMonths()[now.get(Calendar.MONTH)]);
-        map.put("day", String.format("%02d", now.get(Calendar.DAY_OF_MONTH)));
-        map.put("time", String.format("%02d-%02d-%02d.%03d",
-                now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE), now.get(Calendar.SECOND), now.get(Calendar.MILLISECOND)));
-        map.put("session", ec.sessionUuid);
-        map.put("sessionId", Long.toString(ec.sessionId));
-        map.put("eventId", Long.toString(ec.eventId));
-        map.put("perms", ec.groupPermissions.toString());
-        return map;
-    } 
-
-    /**
-     * Take the relative path created by
-     * {@link #expandTemplate(String, Ice.Current)} and call
-     * {@link makeDir(String, boolean, Ice.Current)} on each element of the path
-     * starting at the top, until all the directories have been created.
-     * The full path must not already exist, although a prefix of it may.
-     */
-    protected void createTemplateDir(FsFile relPath, Ice.Current curr) throws ServerError {
-        final List<String> relPathComponents = relPath.getComponents();
-        final int relPathSize = relPathComponents.size();
-        if (relPathSize == 0)
-            throw new IllegalArgumentException("no template directory");
-        if (relPathSize > 1) {
-            final List<String> pathPrefix = relPathComponents.subList(0, relPathSize - 1);
-            makeDir(new FsFile(pathPrefix).toString(), true, curr);
+                } else if (exclusiveHigher == null) {
+                    /* only a lower bound, look further */
+                    toProbe = inclusiveLower << 1;
+                    final String path = getIncrementRepositoryPath(prefix, suffix, padding, toProbe);
+                    if (checkPath(path, null, current).exists()) {
+                        /* moved lower bound */
+                        inclusiveLower = toProbe;
+                    } else {
+                        /* found upper bound */
+                        exclusiveHigher = toProbe;
+                    }
+                } else if (exclusiveHigher - inclusiveLower < 2) {
+                    /* the tight bounds identify the next directory */
+                    count = exclusiveHigher;
+                    break;
+                } else {
+                    /* tighten bounds */
+                    toProbe = (inclusiveLower + exclusiveHigher) >> 1;
+                    final String path = getIncrementRepositoryPath(prefix, suffix, padding, toProbe);
+                    if (checkPath(path, null, current).exists()) {
+                        inclusiveLower = toProbe;
+                    } else {
+                        exclusiveHigher = toProbe;
+                    }
+                }
+            }
+            while (true) {
+                String path;
+                while (true) {
+                    path = getIncrementRepositoryPath(prefix, suffix, padding, count);
+                    if (checkPath(path, null, current).exists()) {
+                        /* the path has since been created, move on to the next increment */
+                        count++;
+                    } else {
+                        /* the path is ready for creating */
+                        break;
+                    }
+                }
+                try {
+                    /* try creating the next directory */
+                    makeDir(path, false, current);
+                } catch (ServerError e) {
+                    /* is another thread trying to create the same directory? give it time to finish up */
+                    SleepTimer.sleepFor(1000);
+                    if (!checkPath(path, null, current).exists()) {
+                        /* something worse happened */
+                        throw e;
+                    } else {
+                        /* find the first non-existing directory and try again */
+                        continue;
+                    }
+                }
+                /* created the directory, so the create method loop need not */
+                done.add(path.substring(path.lastIndexOf(FsFile.separatorChar) + 1));
+                return null;
+            }
         }
-        makeDir(relPath.toString(), false, curr);
+
+        /**
+         * Get the extra directories that correspond to the given natural number.
+         * @param prefix path component text preceding the expansion term in the first directory, may be empty
+         * @param suffix path component text following the expansion term in the first directory, may be empty
+         * @param digits the power of ten that is the directory entry limit, e.g., {@code "3"} for one thousand
+         * @param count the natural number identifying the set of extra directories
+         * @return the extra directories
+         */
+        private List<String> getExtraSubdirectories(String prefix, String suffix, int digits, long count) {
+            final List<String> subdirectories = new ArrayList<String>();
+            StringBuffer paddedCount = new StringBuffer();
+            paddedCount.append(count);
+            /* make padded.length() a multiple of digits by zero padding */
+            while (paddedCount.length() % digits != 0) {
+                paddedCount.insert(0, '0');
+            }
+            /* and work through the digits-length groups */
+            for (int c = 0, l = paddedCount.length(); c < l; c += digits) {
+                subdirectories.add(prefix + paddedCount.substring(c, c + digits) + suffix);
+                /* apply prefix and suffix to first directory only */
+                prefix = "";
+                suffix = "";
+            }
+            return subdirectories;
+        }
+
+        /**
+         * Get the full repository path for the subdirectories indicated by the arguments.
+         * @param prefix path component text preceding the expansion term in the first directory, may be empty
+         * @param suffix path component text following the expansion term in the first directory, may be empty
+         * @param digits the power of ten that is the directory entry limit, e.g., {@code "3"} for one thousand
+         * @param count the natural number identifying the set of extra directories
+         * @return a repository path that includes the extra directories
+         */
+        private String getSubdirsRepositoryPath(String prefix, String suffix, int digits, long count) {
+            final List<String> path = new ArrayList<String>(done);
+            path.addAll(getExtraSubdirectories(prefix, suffix, digits, count));
+            return Joiner.on(FsFile.separatorChar).join(path);
+        }
+
+        /**
+         * Count the entries in the given directory.
+         * @param path the repository path for the directory
+         * @return the number of entries in the directory, or {@code 0} if the path does not exist but its parent is a directory,
+         * or a very large number if the path cannot be created as a directory
+         */
+        private int directoryContentsCount(String path) {
+            final File directory = serverPaths.getServerFileFromFsFile(new FsFile(path));
+            if (directory.exists()) {
+                if (directory.isDirectory()) {
+                    return directory.list().length;
+                }
+            } else {
+                final File parent = directory.getParentFile();
+                if (parent != null && parent.exists() && parent.isDirectory()) {
+                    return 0;
+                }
+            }
+            return Integer.MAX_VALUE;
+        }
+
+        /**
+         * Expand {@code %subdirs%} to none or more directories such that the final one contains no more than one thousand entries.
+         * These extra directories are added at the point in the path where the component mentioning {@code %subdirs%} occurs, when
+         * the preceding directory has become sufficiently full.
+         * @param prefix path component text preceding the expansion term in the first directory, may be empty
+         * @param suffix path component text following the expansion term in the first directory, may be empty
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         * @throws ServerError if the directory could not be created or the expansion term was improperly specified
+         */
+        @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandSubdirs(String prefix, String suffix) throws ServerError {
+            return expandSubdirs(prefix, suffix, "3");
+        }
+
+        /* note latest components with %subdirs% to assure progress in term expansion */
+        private Set<String> skippedSubdirsComponents = new HashSet<String>();
+
+        /**
+         * Expand {@code %subdirs%} to none or more directories such that the final one contains no more than a certain number of
+         * entries. These extra directories are added at the point in the path where the component mentioning {@code %subdirs%}
+         * occurs, when the preceding directory has become sufficiently full.
+         * @param prefix path component text preceding the expansion term in the first directory, may be empty
+         * @param suffix path component text following the expansion term in the first directory, may be empty
+         * @param digitsString the power of ten that is the directory entry limit, e.g., {@code "3"} for one thousand
+         * @return entire replaced path component, may be unchanged to be revisited,
+         * or {@code null} if it has been wholly processed; otherwise it will be created
+         * @throws ServerError if the directory could not be created or the expansion term was improperly specified
+         */
+        // @SuppressWarnings("unused")  /* used by create() via Method.invoke */
+        public String expandSubdirs(String prefix, String suffix, String digitsString) throws ServerError {
+            if (!createDirectories) {
+                throw new ServerError(null, null,
+                        "%subdirs% is prohibited among the root-owned directories in the repository template path");
+            }
+            if (TEMPLATE_TERM.matcher(prefix).matches() || TEMPLATE_TERM.matcher(suffix).matches()) {
+                /* there is another term yet to be expanded before this expansion is attempted */
+                final String component = prefix + "%subdirs:" + digitsString + '%' + suffix;
+                if (skippedSubdirsComponents.add(component)) {
+                    /* this is the first try at expanding this term */
+                    return component;
+                } else {
+                    /* this is not the first try at expanding this term, could be an infinite loop */
+                    throw new ServerError(null, null,
+                            "%subdirs% may not be arbitrarily combined with other expansions " +
+                            "in the same repository template path component, as in \"" + component + '"');
+                }
+            } else {
+                /* useful progress is ahead, so no infinite loop at this point */
+                skippedSubdirsComponents.clear();
+            }
+            final int digits = Integer.parseInt(digitsString);
+            if (digits < 1) {
+                throw new ServerError(null, null,
+                        "invalid parameter \"" + digitsString + "\" for %subdirs% in the repository template path");
+            }
+            /* limit = 10 ^ digits */
+            int limit = 1;
+            for (int i = 0; i < digits; i++) {
+                limit *= 10;
+            }
+            if (directoryContentsCount(Joiner.on(FsFile.separatorChar).join(done)) < limit) {
+                /* do not yet need to break out into subdirectories */
+                return null;
+            }
+            /* pinpoint not-overfull directory with binary search */
+            Long inclusiveLower = null;
+            Long exclusiveHigher = null;
+            long count;
+            while (true) {
+                final long toProbe;
+                if (inclusiveLower == null) {
+                    /* no bounds yet */
+                    toProbe = 0;
+                    if (directoryContentsCount(getSubdirsRepositoryPath(prefix, suffix, digits, toProbe)) < limit) {
+                        /* use the first of the directories */
+                        count = toProbe;
+                        break;
+                    } else {
+                        /* found a lower bound */
+                        inclusiveLower = toProbe;
+                    }
+                } else if (exclusiveHigher == null) {
+                    /* only a lower bound, look further */
+                    toProbe = 1 + inclusiveLower << 1;
+                    if (directoryContentsCount(getSubdirsRepositoryPath(prefix, suffix, digits, toProbe)) < limit) {
+                        /* found upper bound */
+                        exclusiveHigher = toProbe;
+                    } else {
+                        /* moved lower bound */
+                        inclusiveLower = toProbe;
+                    }
+                } else if (exclusiveHigher - inclusiveLower < 2) {
+                    /* the tight bounds identify the next directory */
+                    count = exclusiveHigher;
+                    break;
+                } else {
+                    /* tighten bounds */
+                    toProbe = (inclusiveLower + exclusiveHigher) >> 1;
+                    if (directoryContentsCount(getSubdirsRepositoryPath(prefix, suffix, digits, toProbe)) < limit) {
+                        exclusiveHigher = toProbe;
+                    } else {
+                        inclusiveLower = toProbe;
+                    }
+                }
+            }
+            /* ensure that the directory exists ... */
+            done.addAll(getExtraSubdirectories(prefix, suffix, digits, count));
+            makeDir(new FsFile(done).toString(), true, current);
+            /* ... so the create method loop need not create it */
+            return null;
+        }
+
+        /**
+         * Expand and create the template path.
+         * @return the path
+         * @throws ServerError if the path could not be expanded and created
+         */
+        FsFile create() throws ServerError {
+            while (!remaining.isEmpty()) {
+                /* work on next directory component */
+                String pattern = remaining.pop();
+                String oldPattern;
+                Matcher matcher = TEMPLATE_TERM.matcher(pattern);
+                boolean isMatcherPristine = true;
+                while (pattern != null) {
+                    if (matcher.find()) {
+                        isMatcherPristine = false;
+                    } else {
+                        /* no terms still to review in this component */
+                        if (isMatcherPristine) {
+                            /* and none to revisit, this component is done */
+                            done.add(pattern);
+                            break;
+                        } else {
+                            /* revisit previous terms in this component */
+                            matcher.reset();
+                            isMatcherPristine = true;
+                            continue;
+                        }
+                    }
+
+                    /* examine the term to expand */
+                    final String prefix = pattern.substring(0, matcher.start());
+                    final String suffix = pattern.substring(matcher.end());
+                    final String term = matcher.group(1);
+                    String parameters = matcher.group(3);
+                    Method expander;
+
+                    /* try to expand the term */
+                    oldPattern = pattern;
+                    final String methodName = "expand" + StringUtils.capitalize(term);
+                    if (parameters != null) {
+                        /* with parameters */
+                        try {
+                            expander = getClass().getMethod(methodName, String.class, String.class, String.class);
+                            pattern = (String) expander.invoke(this, prefix, suffix, parameters);
+                        } catch (/* Java SE 7 ReflectiveOperation*/Exception e) {
+                            log.warn("ignoring parameters \"" + parameters + "\" on \"" + matcher.group(0) +
+                                    "\" in repository template path");
+                            parameters = null;
+                        }
+                    }
+                    /* without parameters */
+                    try {
+                        if (parameters == null) {
+                            expander = getClass().getMethod(methodName, String.class, String.class);
+                            pattern = (String) expander.invoke(this, prefix, suffix);
+                        }
+                    } catch (/* Java SE 7 ReflectiveOperation*/Exception e) {
+                        throw new ServerError(null, null,
+                                "repository template path references unknown expansion term \"" + term + '"');
+                    }
+                    if (!(pattern == null || oldPattern.equals(pattern))) {
+                        /* successful expansion, so match against the new form of this component */
+                        matcher = TEMPLATE_TERM.matcher(pattern);
+                        isMatcherPristine = true;
+                    }
+                }
+                if (pattern != null && createDirectories) {
+                    /* expansion occurred but directory was not created */
+                    makeDir(new FsFile(done).toString(), !remaining.isEmpty(), current);
+                }
+            }
+            /* all components now processed */
+            return new FsFile(done);
+        }
     }
+
+    /**
+     * Expand the root-owned segment of the template path.
+     * @param ctx the event context to apply in expanding terms
+     * @param current the method invocation context in which to perform queries
+     * @return the expanded template path
+     * @throws ServerError if the path could not be expanded
+     */
+    private FsFile expandTemplateRootOwnedPath(EventContext ctx, Current current) throws ServerError {
+        return new TemplateDirectoryCreator(FsFile.emptyPath, templateRoot, ctx, null, false, current).create();
+    }
+
+    /**
+     * Expand the root-owned segment of the template path.
+     * @param ctx the event context to apply in expanding terms
+     * @param sf the service factory which to perform queries
+     * @return the expanded template path
+     * @throws ServerError if the path could not be expanded
+     */
+    /* exposed for unit testing only */
+    /*private*/ protected FsFile expandTemplateRootOwnedPath(EventContext ctx, ServiceFactory sf) throws ServerError {
+        return new TemplateDirectoryCreator(FsFile.emptyPath, templateRoot, ctx, null, false, sf).create();
+    }
+
+    /**
+     * Expand and create the user-owned segment of the template path.
+     * @param ctx the event context to apply in expanding terms
+     * @param rootBase the expanded root-owned segment of the template path
+     * @param Object consistentData the object to hash in expanding {@code %hash%}
+     * @param current the method invocation context in which to perform queries and create directories
+     * @return the expanded template path
+     * @throws ServerError if the path could not be expanded and created
+     */
+    private FsFile expandAndCreateTemplateUserOwnedPath(EventContext ctx, FsFile rootBase, Object consistentData, Current current)
+            throws ServerError {
+        return new TemplateDirectoryCreator(rootBase, templateUser, ctx, consistentData, true, current).create();
+    }
+
+    /**
+     * Expand the template path and create its directories with the correct ownership.
+     * @param consistentData the object to hash in expanding {@code %hash%}
+     * @param __current the current ICE method invocation context
+     * @return the expanded template path
+     * @throws ServerError if the new path could not be created
+     */
+    protected FsFile createTemplatePath(Object consistentData, Ice.Current __current) throws ServerError {
+        final EventContext ctx = repositoryDao.getEventContext(__current);
+
+        final FsFile rootOwnedExpanded;
+        if (FsFile.emptyPath.equals(templateRoot)) {
+            rootOwnedExpanded = FsFile.emptyPath;
+        } else {
+            /* there are some root-owned directories first */
+            rootOwnedExpanded = expandTemplateRootOwnedPath(ctx, __current);
+            final Current rootCurr = sudo(__current, rootSessionUuid);
+            rootCurr.ctx.put(omero.constants.GROUP.value, Long.toString(userGroupId));
+            makeDir(rootOwnedExpanded.toString(), true, rootCurr);
+        }
+
+        /* now create the user-owned directories */
+        final FsFile wholeExpanded = expandAndCreateTemplateUserOwnedPath(ctx, rootOwnedExpanded, consistentData, __current);
+        if (wholeExpanded.equals(rootOwnedExpanded)) {
+            throw new omero.ApiUsageException(null, null,
+                    "no user-owned directories in expanded form of managed repository template path");
+        }
+        return wholeExpanded;
+}
 
     /** Return value for {@link #trimPaths}. */
     private static class Paths {
         final FsFile basePath;
         final List<FsFile> fullPaths;
-        
+
         Paths(FsFile basePath, List<FsFile> fullPaths) {
             this.basePath = basePath;
             this.fullPaths = fullPaths;
         }
     }
-    
+
     /**
      * Trim off the start of long client-side paths.
      * @param basePath the common root
@@ -491,7 +1261,7 @@ public class ManagedRepositoryI extends PublicRepositoryI
      * @param readerClass BioFormats reader for data, may be null
      * @return possibly trimmed common root and full paths
      */
-    protected Paths trimPaths(FsFile basePath, List<FsFile> fullPaths, 
+    protected Paths trimPaths(FsFile basePath, List<FsFile> fullPaths,
             Class<? extends FormatReader> readerClass) {
         // find how many common parent directories to retain according to BioFormats
         Integer commonParentDirsToRetain = null;
@@ -502,12 +1272,12 @@ public class ManagedRepositoryI extends PublicRepositoryI
         try {
             commonParentDirsToRetain = readerClass.newInstance().getRequiredDirectories(localStylePaths);
         } catch (Exception e) { }
-        
+
         final List<String> basePathComponents = basePath.getComponents();
         final int baseDirsToTrim;
         if (commonParentDirsToRetain == null) {
             // no help from BioFormats
-            
+
             // find the length of the shortest path, including file name
             int smallestPathLength;
             if (fullPaths.isEmpty())
@@ -520,7 +1290,7 @@ public class ManagedRepositoryI extends PublicRepositoryI
                         smallestPathLength = pathLength;
                 }
             }
-            
+
             // plan to trim to try to retain a certain number of parent directories
             baseDirsToTrim = smallestPathLength - parentDirsToRetain - (1 /* file name */);
         }
@@ -538,7 +1308,7 @@ public class ManagedRepositoryI extends PublicRepositoryI
         }
         return new Paths(basePath, trimmedPaths);
     }
-    
+
     /**
      * Take a relative path that the user would like to see in his or her
      * upload area, and provide an import location instance whose paths
@@ -551,7 +1321,7 @@ public class ManagedRepositoryI extends PublicRepositoryI
      * @return {@link ImportLocation} instance
      */
     protected ImportLocation suggestImportPaths(FsFile relPath, FsFile basePath, List<FsFile> paths,
-            Class<? extends FormatReader> reader, ChecksumAlgorithm checksumAlgorithm, Ice.Current __current) 
+            Class<? extends FormatReader> reader, ChecksumAlgorithm checksumAlgorithm, Ice.Current __current)
                     throws omero.ServerError {
         final Paths trimmedPaths = trimPaths(basePath, paths, reader);
         basePath = trimmedPaths.basePath;
@@ -600,24 +1370,44 @@ public class ManagedRepositoryI extends PublicRepositoryI
     }
 
     /**
+     * @param x a collection of items, not {@code null}
+     * @param y a collection of items, not {@code null}
+     * @return if the collections have the same items in the same order, or if one is a prefix of the other
+     */
+    private static boolean isConsistentPrefixes(Iterable<?> x, Iterable<?> y) {
+        final Iterator<?> xIterator = x.iterator();
+        final Iterator<?> yIterator = y.iterator();
+        while (xIterator.hasNext() && yIterator.hasNext()) {
+            if (!xIterator.next().equals(yIterator.next())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Checks for the top-level user directory restriction before calling
      * {@link PublicRepositoryI#makeCheckedDirs(LinkedList<CheckedPath>, boolean, Current)}
      */
+    @Override
     protected void makeCheckedDirs(final LinkedList<CheckedPath> paths,
-            boolean parents, Session s, ServiceFactory sf, SqlAction sql)
-                    throws ResourceError, ServerError {
+            boolean parents, Session s, ServiceFactory sf, SqlAction sql,
+            ome.system.EventContext effectiveEventContext) throws ServerError {
 
-        final ome.system.EventContext _ec
-            = ((LocalAdmin) sf.getAdminService()).getEventContextQuiet();
-        final EventContext ec = IceMapper.convert(_ec);
-        final String expanded = expandTemplate(template, ec);
-        final FsFile asfsfile = new FsFile(expanded);
-        final List<String> components = asfsfile.getComponents();
+        final IAdmin adminService = sf.getAdminService();
+        final EventContext ec = IceMapper.convert(effectiveEventContext);
+        final FsFile rootOwnedPath = expandTemplateRootOwnedPath(ec, sf);
         final List<CheckedPath> pathsToFix = new ArrayList<CheckedPath>();
+        final List<CheckedPath> pathsForRoot;
 
-        // hard-coded assumptions: the first element of the template must match
-        // user_id and the last is unique in someway (and therefore won't be
-        // handled specially.
+        /* if running as root then the paths must be root-owned */
+        final long rootId = adminService.getSecurityRoles().getRootId();
+        if (adminService.getEventContext().getCurrentUserId() == rootId) {
+            pathsForRoot = ImmutableList.copyOf(paths);
+        } else {
+            pathsForRoot = ImmutableList.of();
+        }
+
         for (int i = 0; i < paths.size(); i++) {
 
             CheckedPath checked = paths.get(i);
@@ -625,40 +1415,35 @@ public class ManagedRepositoryI extends PublicRepositoryI
                 // This shouldn't happen but just in case.
                 throw new ResourceError(null, null, "Cannot re-create root!");
             }
-            
-            if (i>0 && i>(components.size()-1)) {
-                // we always check at least one path element, but after that
-                // we only need to check as far as one less than the size of
-                // the template
-                break;
-            }
 
-            if (checked.parent().isRoot) {
-                // This is a top-level directory. This must equal
-                // "%USERNAME%_%USERID%", in which case if it doesn't exist, it will
-                // be created for the user in the "user" group so that it is
-                // visible globally.
-                String userDirectory = getUserDirectoryName(ec);
-                if (!userDirectory.equals(checked.getName())) {
-                    throw new omero.ValidationException(null, null, String.format(
-                            "User-directory name mismatch! (%s<>%s)",
-                            userDirectory, checked.getName()));
-                            
-                }
+            /* check that the path is consistent with the root-owned template path directories */
+            if (!isConsistentPrefixes(rootOwnedPath.getComponents(), checked.fsFile.getComponents())) {
+                throw new omero.ValidationException(null, null,
+                        "cannot create directory \"" + checked.fsFile
+                        + "\" with template path's root-owned \"" + rootOwnedPath + "\"");
             }
 
             pathsToFix.add(checked);
         }
-        
-        super.makeCheckedDirs(paths, parents, s, sf, sql);
-        
+
+        super.makeCheckedDirs(paths, parents, s, sf, sql, effectiveEventContext);
+
+        /* ensure that root segment of the template path is wholly root-owned */
+        if (!pathsForRoot.isEmpty()) {
+            final Experimenter rootUser = sf.getQueryService().find(Experimenter.class, rootId);
+            final IUpdate updateService = sf.getUpdateService();
+            for (final CheckedPath pathForRoot : pathsForRoot) {
+                final OriginalFile directory = repositoryDao.findRepoFile(sf, sql, getRepoUuid(), pathForRoot, null);
+                if (directory.getDetails().getOwner().getId() != rootId) {
+                    directory.getDetails().setOwner(rootUser);
+                    updateService.saveObject(directory);
+                }
+            }
+        }
+
         // Now that we know that these are the right directories for
         // the current user, we make sure that the directories are in
         // the user group.
         repositoryDao.createOrFixUserDir(getRepoUuid(), pathsToFix, s, sf, sql);
-    }
-
-    protected String getUserDirectoryName(EventContext ec) {
-        return String.format("%s_%s", ec.userName, ec.userId);
     }
 }

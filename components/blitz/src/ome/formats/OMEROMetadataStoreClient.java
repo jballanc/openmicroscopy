@@ -2,7 +2,7 @@
  * ome.formats.OMEROMetadataStoreClient
  *
  *------------------------------------------------------------------------------
- *  Copyright (C) 2006-2013 University of Dundee. All rights reserved.
+ *  Copyright (C) 2006-2014 University of Dundee. All rights reserved.
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -21,6 +21,7 @@
  *------------------------------------------------------------------------------
  *
  */
+
 package ome.formats;
 
 import static omero.rtypes.rbool;
@@ -143,6 +144,7 @@ import omero.model.Filter;
 import omero.model.FilterSet;
 import omero.model.FilterType;
 import omero.model.Format;
+import omero.model.GenericExcitationSource;
 import omero.model.IObject;
 import omero.model.Illumination;
 import omero.model.Image;
@@ -164,6 +166,7 @@ import omero.model.Line;
 import omero.model.ListAnnotation;
 import omero.model.LogicalChannel;
 import omero.model.LongAnnotation;
+import omero.model.MapAnnotation;
 import omero.model.Mask;
 import omero.model.Medium;
 import omero.model.MicrobeamManipulation;
@@ -202,6 +205,7 @@ import omero.model.WellSample;
 import omero.model.XmlAnnotation;
 import omero.sys.EventContext;
 import omero.sys.ParametersI;
+import omero.util.IceMapper;
 
 import org.apache.commons.io.FilenameUtils;
 
@@ -222,6 +226,7 @@ import Glacier2.PermissionDeniedException;
 public class OMEROMetadataStoreClient
     implements MetadataStore, IMinMaxStore, IObjectContainerStore
 {
+
     /** Logger for this class */
     private Logger log = LoggerFactory.getLogger(OMEROMetadataStoreClient.class);
 
@@ -372,7 +377,7 @@ public class OMEROMetadataStoreClient
     /**
      * Initialize all services needed
      *
-     * @param manageLifecylce
+     * @param manageLifecycle
      *
      *            Whether or not to call the {@link Thread#start()} method on
      *            the {@link #keepAlive} instance. This will be set to false
@@ -450,16 +455,16 @@ public class OMEROMetadataStoreClient
     }
 
     /**
-     * @return user-configured "omero.block_size" or {@link omero.constants.DEFAULTBLOCKSIZE}
-     * if none is set.
+     * simpler helper for the {@link #getDefaultBatchSize()} and
+     * {@link #getDefaultBlockSize()} methods.
      */
-    public int getDefaultBlockSize()
+    private int getDefaultInt(String key, int def)
     {
         if (c != null)
         {
             try
             {
-                return Integer.valueOf(c.getProperty("omero.block_size"));
+                return Integer.valueOf(c.getProperty(key));
             }
 
             catch (Exception e)
@@ -468,7 +473,25 @@ public class OMEROMetadataStoreClient
             }
 
         }
-        return omero.constants.DEFAULTBLOCKSIZE.value;
+        return def;
+    }
+
+    /**
+     * @return user-configured "omero.batch_size" or {@link omero.constants.DEFAULTBATCHSIZE}
+     * if none is set.
+     */
+    public int getDefaultBatchSize()
+    {
+        return getDefaultInt("omero.batch_size", omero.constants.DEFAULTBATCHSIZE.value);
+    }
+
+    /**
+     * @return user-configured "omero.block_size" or {@link omero.constants.DEFAULTBLOCKSIZE}
+     * if none is set.
+     */
+    public int getDefaultBlockSize()
+    {
+        return getDefaultInt("omero.block_size", omero.constants.DEFAULTBLOCKSIZE.value);
     }
 
     /**
@@ -1741,7 +1764,7 @@ public class OMEROMetadataStoreClient
 
             if (log.isDebugEnabled())
             {
-		log.debug("Starting containers....");
+                log.debug("Starting containers....");
                 for (LSID key : containerCache.keySet())
                 {
                     String s = String.format("%s == %s,%s",
@@ -1753,22 +1776,66 @@ public class OMEROMetadataStoreClient
                 log.debug("Starting references....");
                 for (String key : referenceStringCache.keySet())
                 {
-			for (String value : referenceStringCache.get(key))
-			{
-				String s = String.format("%s == %s", key, value);
-				log.debug(s);
-			}
+                    for (String value : referenceStringCache.get(key))
+                    {
+                        String s = String.format("%s == %s", key, value);
+                        log.debug(s);
+                    }
                 }
 
                 log.debug("containerCache contains " + containerCache.size()
                           + " entries.");
-                log.debug("referenceCache contains "
-				  + countCachedReferences(null, null)
+                log.debug("referenceCache contains " + countCachedReferences(null, null)
                           + " entries.");
             }
 
-            delegate.updateObjects(containerArray);
-            delegate.updateReferences(referenceStringCache);
+            int maxBatchSize = getDefaultBatchSize();
+            int containerBatchCount = 0;
+            int containerPointer = 0;
+            log.info("Handling # of containers: {}", containerArray.length);
+            while (containerPointer < containerArray.length)
+            {
+                int nObjects = (int) Math.min(
+                    maxBatchSize, containerArray.length - containerPointer);
+
+                IObjectContainer[] batch = Arrays.copyOfRange(
+                        containerArray, containerPointer, containerPointer+nObjects);
+
+                delegate.updateObjects(batch);
+                containerPointer += nObjects;
+
+                containerBatchCount += 1;
+                if (containerBatchCount > 1)
+                {
+                    log.info("Starting containerBatch #{}", containerBatchCount);
+                }
+            }
+
+            int referenceBatchCount = 0;
+            int referencePointer = 0;
+            String[] referenceKeys = referenceStringCache.keySet().toArray(
+              new String[referenceStringCache.size()]);
+
+            log.info("Handling # of references: {}", referenceKeys.length);
+            while (referencePointer < referenceKeys.length) {
+
+                referenceBatchCount += 1;
+                if (referenceBatchCount > 1)
+                {
+                    log.info("Starting referenceBatch #{}", referenceBatchCount);
+                }
+
+                Map<String, String[]> referenceBatch = new HashMap<String, String[]>();
+                int batchSize = (int) Math.min(
+                    maxBatchSize, referenceKeys.length - referencePointer);
+                for (int i=0; i<batchSize; i++) {
+                    String key = referenceKeys[referencePointer + i];
+                    referenceBatch.put(key, referenceStringCache.get(key));
+                }
+                delegate.updateReferences(referenceBatch);
+                referencePointer += batchSize;
+            }
+
             Map<String, List<IObject>> rv = delegate.saveToDB(link);
             pixelsList = new OMEROMetadataStoreClientRoot((List) rv.get("Pixels"));
 
@@ -2764,20 +2831,20 @@ public class OMEROMetadataStoreClient
     }
 
     /* (non-Javadoc)
-     * @see loci.formats.meta.MetadataStore#setChannelEmissionWavelength(ome.xml.model.primitives.PositiveInteger, int, int)
+     * @see loci.formats.meta.MetadataStore#setChannelEmissionWavelength(ome.xml.model.primitives.PositiveFloat, int, int)
      */
     public void setChannelEmissionWavelength(
-            PositiveInteger emissionWavelength, int imageIndex, int channelIndex)
+            PositiveFloat emissionWavelength, int imageIndex, int channelIndex)
     {
         Channel o = getChannel(imageIndex, channelIndex);
         o.getLogicalChannel().setEmissionWave(toRType(emissionWavelength));
     }
 
     /** (non-Javadoc)
-     * @see loci.formats.meta.MetadataStore#setChannelExcitationWavelength(ome.xml.model.primitives.PositiveInteger, int, int)
+     * @see loci.formats.meta.MetadataStore#setChannelExcitationWavelength(ome.xml.model.primitives.PositiveFloat, int, int)
      */
     public void setChannelExcitationWavelength(
-            PositiveInteger excitationWavelength, int imageIndex,
+            PositiveFloat excitationWavelength, int imageIndex,
             int channelIndex)
     {
         Channel o = getChannel(imageIndex, channelIndex);
@@ -2917,10 +2984,10 @@ public class OMEROMetadataStoreClient
     }
 
     /* (non-Javadoc)
-     * @see loci.formats.meta.MetadataStore#setChannelLightSourceSettingsWavelength(ome.xml.model.primitives.PositiveInteger, int, int)
+     * @see loci.formats.meta.MetadataStore#setChannelLightSourceSettingsWavelength(ome.xml.model.primitives.PositiveFloat, int, int)
      */
     public void setChannelLightSourceSettingsWavelength(
-            PositiveInteger wavelength, int imageIndex, int channelIndex)
+            PositiveFloat wavelength, int imageIndex, int channelIndex)
     {
         LightSettings o = getChannelLightSourceSettings(imageIndex, channelIndex);
         o.setWavelength(toRType(wavelength));
@@ -3970,6 +4037,60 @@ public class OMEROMetadataStoreClient
          o.setSerialNumber(toRType(serialNumber));
     }
 
+    private GenericExcitationSource getGenericExcitationSource(int instrumentIndex, int lightSourceIndex) {
+        final LinkedHashMap<Index, Integer> indexes = new LinkedHashMap<Index, Integer>();
+        indexes.put(Index.INSTRUMENT_INDEX, instrumentIndex);
+        indexes.put(Index.LIGHT_SOURCE_INDEX, lightSourceIndex);
+        return getSourceObject(GenericExcitationSource.class, indexes);
+    }
+
+
+    // ID accessor from parent LightSource
+    public void setGenericExcitationSourceID(String id, int instrumentIndex, int lightSourceIndex) {
+        checkDuplicateLSID(GenericExcitationSource.class, id);
+        final LinkedHashMap<Index, Integer> indexes = new LinkedHashMap<Index, Integer>();
+        indexes.put(Index.INSTRUMENT_INDEX, instrumentIndex);
+        indexes.put(Index.LIGHT_SOURCE_INDEX, lightSourceIndex);
+        IObjectContainer o = getIObjectContainer(GenericExcitationSource.class, indexes);
+        o.LSID = id;
+        addAuthoritativeContainer(GenericExcitationSource.class, id, o);
+    }
+
+    // LotNumber accessor from parent LightSource
+    public void setGenericExcitationSourceLotNumber(String lotNumber, int instrumentIndex, int lightSourceIndex) {
+        final GenericExcitationSource o = getGenericExcitationSource(instrumentIndex, lightSourceIndex);
+        o.setLotNumber(toRType(lotNumber));
+    }
+
+    public void setGenericExcitationSourceMap(Map<String, String> map, int instrumentIndex, int lightSourceIndex) {
+        final GenericExcitationSource o = getGenericExcitationSource(instrumentIndex, lightSourceIndex);
+        o.setMap(IceMapper.convertStringStringMap(map));
+    }
+
+    // Manufacturer accessor from parent LightSource
+    public void setGenericExcitationSourceManufacturer(String manufacturer, int instrumentIndex, int lightSourceIndex) {
+        final GenericExcitationSource o = getGenericExcitationSource(instrumentIndex, lightSourceIndex);
+        o.setManufacturer(toRType(manufacturer));
+    }
+
+    // Model accessor from parent LightSource
+    public void setGenericExcitationSourceModel(String model, int instrumentIndex, int lightSourceIndex) {
+        final GenericExcitationSource o = getGenericExcitationSource(instrumentIndex, lightSourceIndex);
+        o.setModel(toRType(model));
+    }
+
+    // Power accessor from parent LightSource
+    public void setGenericExcitationSourcePower(Double power, int instrumentIndex, int lightSourceIndex) {
+        final GenericExcitationSource o = getGenericExcitationSource(instrumentIndex, lightSourceIndex);
+        o.setPower(toRType(power));
+    }
+
+    // SerialNumber accessor from parent LightSource
+    public void setGenericExcitationSourceSerialNumber(String serialNumber, int instrumentIndex, int lightSourceIndex) {
+        final GenericExcitationSource o = getGenericExcitationSource(instrumentIndex, lightSourceIndex);
+        o.setSerialNumber(toRType(serialNumber));
+    }
+
     ////////ExperimenterGroup/////////
 
     /* (non-Javadoc)
@@ -4221,6 +4342,11 @@ public class OMEROMetadataStoreClient
         o.setHumidity(toRType(humidity));
     }
 
+    public void setImagingEnvironmentMap(Map<String, String> map, int imageIndex) {
+        final ImagingEnvironment o = getImagingEnvironment(imageIndex);
+        o.setMap(IceMapper.convertStringStringMap(map));
+    }
+
     /* (non-Javadoc)
      * @see loci.formats.meta.MetadataStore#setImagingEnvironmentTemperature(java.lang.Double, int)
      */
@@ -4414,9 +4540,9 @@ public class OMEROMetadataStoreClient
     }
 
     /* (non-Javadoc)
-     * @see loci.formats.meta.MetadataStore#setLaserWavelength(ome.xml.model.primitives.PositiveInteger, int, int)
+     * @see loci.formats.meta.MetadataStore#setLaserWavelength(ome.xml.model.primitives.PositiveFloat, int, int)
      */
-    public void setLaserWavelength(PositiveInteger wavelength,
+    public void setLaserWavelength(PositiveFloat wavelength,
             int instrumentIndex, int lightSourceIndex)
     {
         Laser o = getLaser(instrumentIndex, lightSourceIndex);
@@ -4809,6 +4935,18 @@ public class OMEROMetadataStoreClient
         }
     }
 
+    public void setMapAnnotationValue(Map<String, String> value, int mapAnnotationIndex) {
+        final MapAnnotation o = getMapAnnotation(mapAnnotationIndex);
+        if (o != null && value != null) {
+            final Map<String, RString> stringRStringMap = new HashMap<String, RString>();
+
+            for (final Entry<String, String> mapEntry : value.entrySet()) {
+                stringRStringMap.put(mapEntry.getKey(), toRType(mapEntry.getValue()));
+            }
+            o.setMapValue(stringRStringMap);
+        }
+    }
+
     /* (non-Javadoc)
      * @see loci.formats.meta.MetadataStore#setMaskText(java.lang.String, int, int)
      */
@@ -5059,10 +5197,10 @@ public class OMEROMetadataStoreClient
     }
 
     /* (non-Javadoc)
-     * @see loci.formats.meta.MetadataStore#setMicrobeamManipulationLightSourceSettingsWavelength(ome.xml.model.primitives.PositiveInteger, int, int, int)
+     * @see loci.formats.meta.MetadataStore#setMicrobeamManipulationLightSourceSettingsWavelength(ome.xml.model.primitives.PositiveFloat, int, int, int)
      */
     public void setMicrobeamManipulationLightSourceSettingsWavelength(
-            PositiveInteger wavelength, int experimentIndex,
+            PositiveFloat wavelength, int experimentIndex,
             int microbeamManipulationIndex, int lightSourceSettingsIndex)
     {
         LightSettings o = getMicrobeamManipulationLightSourceSettings(experimentIndex,
@@ -7427,6 +7565,41 @@ public class OMEROMetadataStoreClient
     public void  setLongAnnotationAnnotator(String value, int XMLAnnotationIndex)
     {
         // TODO : not in OMERO model
+    }
+
+    private MapAnnotation getMapAnnotation(int mapAnnotationIndex)
+    {
+        final LinkedHashMap<Index, Integer> indexes = new LinkedHashMap<Index, Integer>(1);
+        indexes.put(Index.MAP_ANNOTATION_INDEX, mapAnnotationIndex);
+        return getSourceObject(MapAnnotation.class, indexes);
+    }
+
+    public void setMapAnnotationAnnotationRef(String annotation, int mapAnnotationIndex, int annotationRefIndex) {
+        final LSID key = new LSID(MapAnnotation.class, mapAnnotationIndex);
+        addReference(key, new LSID(annotation));
+    }
+
+    public void setMapAnnotationAnnotator(String annotator, int mapAnnotationIndex) {
+        // TODO : not in OMERO model
+    }
+
+    public void setMapAnnotationDescription(String description, int mapAnnotationIndex) {
+        final MapAnnotation o = getMapAnnotation(mapAnnotationIndex);
+        o.setDescription(toRType(description));
+    }
+
+    public void setMapAnnotationID(String id, int mapAnnotationIndex) {
+        checkDuplicateLSID(MapAnnotation.class, id);
+        final LinkedHashMap<Index, Integer> indexes = new LinkedHashMap<Index, Integer>(1);
+        indexes.put(Index.MAP_ANNOTATION_INDEX, mapAnnotationIndex);
+        final IObjectContainer o = getIObjectContainer(MapAnnotation.class, indexes);
+        o.LSID = id;
+        addAuthoritativeContainer(MapAnnotation.class, id, o);
+    }
+
+    public void setMapAnnotationNamespace(String namespace, int mapAnnotationIndex) {
+        final MapAnnotation o = getMapAnnotation(mapAnnotationIndex);
+        o.setNs(toRType(namespace));
     }
 
     /**

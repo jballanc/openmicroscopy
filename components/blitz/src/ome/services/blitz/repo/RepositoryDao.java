@@ -226,6 +226,22 @@ public interface RepositoryDao {
     EventContext getEventContext(final Ice.Current current);
 
     /**
+     * Get the current user's institution.
+     * @param userId the ID of the user whose institution is to be fetched
+     * @param current the current ICE method invocation context
+     * @return the institution, may be {@code null}
+     */
+    String getUserInstitution(long userId, Ice.Current current);
+
+    /**
+     * Get the current user's institution.
+     * @param userId the ID of the user whose institution is to be fetched
+     * @param sf the service factory to use for the query
+     * @return the institution, may be {@code null}
+     */
+    String getUserInstitution(long userId, ServiceFactory sf);
+
+    /**
      * Call {@link SqlAction.findRepoDeleteLogs(DeleteLog)} with the current
      * context.
      *
@@ -248,7 +264,8 @@ public interface RepositoryDao {
     /**
      * Create a number of directories in a single transaction, using the
      * {@link PublicRepositoryI} instance as a callback for implementation
-     * specific logic.
+     * specific logic. Applies the <q>real user</q>'s event context when
+     * within a {@link PublicRepositoryI#sudo(Current, String)}.
      */
     void makeDirs(PublicRepositoryI repo, List<CheckedPath> dirs, boolean parents,
             Ice.Current c) throws ServerError;

@@ -17,13 +17,13 @@ from omero.util.temp_files import create_path
 
 subcommands = [
     'all', 'def', 'get', 'set', 'drop', 'keys', 'load', 'edit', 'version',
-    'path', 'lock', 'upgrade', 'old', 'append', 'remove']
+    'path', 'lock', 'upgrade', 'old', 'append', 'remove', 'list']
 
 
 @pytest.fixture
 def configxml(monkeypatch):
     class MockConfigXml(object):
-        def __init__(self, path):
+        def __init__(self, path, **kwargs):
             pass
 
         def as_map(self):
@@ -280,3 +280,17 @@ class TestPrefs(object):
         self.invoke("remove omero.web.test 3")
         self.invoke("get omero.web.test")
         self.assertStdoutStderr(capsys, out='[]')
+
+    @pytest.mark.parametrize("data", (
+        ({}, ""),
+        ({"a": "b"}, "a=b"),
+        ({"a": "b", "a": "d"}, "a=d"),
+        ({"a": "b", "c": "d"}, "a=b\nc=d"),
+        ({"c": "d", "a": "b"}, "a=b\nc=d"),
+    ))
+    @pytest.mark.usefixtures('configxml')
+    def testList(self, data, monkeypatch, capsys):
+        for k, v in data[0].items():
+            self.invoke("set %s %s" % (k, v))
+        self.invoke("list")
+        self.assertStdoutStderr(capsys, out=data[1])

@@ -112,18 +112,22 @@
                 // set-up the tags form to use dialog
                 $("#add_tags_form").dialog({
                     autoOpen: false,
-                    resizable: true,
-                    height: 410,
-                    width:420,
+                    resizable: false,
+                    height: 520,
+                    width: 780,
                     modal: true,
                     buttons: {
-                        "Accept": function() {
+                        "Save": function() {
                             // simply submit the form (AJAX handling set-up above)
-                            $("#add_tags_form").submit();
+                            $("#add_tags_form").trigger('prepare-submit').submit();
                             $( this ).dialog( "close" );
                         },
                         "Cancel": function() {
                             $( this ).dialog( "close" );
+                        },
+                        "Reset": function() {
+                            // discard all changes and reload the form
+                            $("#add_tags_form").html('').load($("#launch_tags_form").attr('href'));
                         }
                     }
                 });
@@ -133,7 +137,7 @@
                         $("#add_tags_form").dialog( "close" );
                     },
                     success: function(data) {
-                        $("#tagann_spinner").hide();
+                        $("#add_tags_form").dialog( "close" );      // hide in case it was submitted via 'Enter'
                         // update the list of tags
                         var $tag = $(data);
                         $tag.filter(".tag_annotation_wrapper").each(function(){
@@ -284,21 +288,8 @@
     </h1>
 
     <div style="position: relative; float: right">
-	    <!-- multi-object link -->
-        <button id="show_link_btn" class="btn silver btn_link" title="Link to the selected Objects">
-			<span></span>
-		</button>
-		<div id="link_info_popup" class="info_popup" style="right:0px; top:30px; padding:4px; display:none">
-            <table><tr><td>
-                <input type="text" size="30" 
-                value="{{ webclient_path }}?show={{ link_string }}"/>
-            </td><td>
-                <img title="Close" src="{% static 'webgateway/img/close.gif' %}" />
-            </td></tr></table>
-		</div>
 
-        <!-- Publishing Options (Figure Scripts) -->
-        {% include "webclient/annotations/includes/figure_scripts_menu.html" %}
+        {% include "webclient/annotations/includes/toolbar.html" %}
 
     </div>
 

@@ -2,7 +2,7 @@
  * ome.services.blitz.repo.PublicRepositoryI
  *
  *------------------------------------------------------------------------------
- *  Copyright (C) 2006-2013 University of Dundee. All rights reserved.
+ *  Copyright (C) 2006-2014 University of Dundee. All rights reserved.
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -30,6 +30,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -44,6 +45,7 @@ import org.apache.commons.io.filefilter.IOFileFilter;
 import org.apache.commons.io.filefilter.NameFileFilter;
 import org.apache.commons.lang.StringUtils;
 import org.hibernate.Session;
+import org.postgresql.util.PSQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.BeansException;
@@ -57,8 +59,6 @@ import ome.api.IQuery;
 import ome.api.RawFileStore;
 import ome.formats.importer.ImportConfig;
 import ome.formats.importer.OMEROWrapper;
-import ome.model.annotations.FileAnnotation;
-import ome.model.annotations.FilesetAnnotationLink;
 import ome.services.blitz.impl.AbstractAmdServant;
 import ome.services.blitz.impl.ServiceFactoryI;
 import ome.services.blitz.repo.path.FilePathRestrictionInstance;
@@ -71,6 +71,7 @@ import ome.services.blitz.util.ChecksumAlgorithmMapper;
 import ome.services.blitz.util.FindServiceFactoryMessage;
 import ome.services.blitz.util.RegisterServantMessage;
 import ome.services.util.Executor;
+import ome.services.util.SleepTimer;
 import ome.system.OmeroContext;
 import ome.system.Principal;
 import ome.system.ServiceFactory;
@@ -82,7 +83,6 @@ import omero.InternalException;
 import omero.RLong;
 import omero.RMap;
 import omero.RType;
-import omero.ResourceError;
 import omero.SecurityViolation;
 import omero.ServerError;
 import omero.ValidationException;
@@ -101,7 +101,6 @@ import omero.grid._RepositoryOperations;
 import omero.grid._RepositoryTie;
 import omero.model.ChecksumAlgorithm;
 import omero.model.OriginalFile;
-import omero.model.OriginalFileI;
 import omero.model.enums.ChecksumAlgorithmSHA1160;
 import omero.util.IceMapper;
 
@@ -130,6 +129,12 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
 
     }
 
+    /** key for finding the real session UUID under sudo */
+    static final String SUDO_REAL_SESSIONUUID = "omero.internal.sudo.real:" + omero.constants.SESSIONUUID.value;
+
+    /** key for finding the real group name under sudo */
+    static final String SUDO_REAL_GROUP_NAME = "omero.internal.sudo.real:" + omero.constants.GROUP.value;
+
     private final static Logger log = LoggerFactory.getLogger(PublicRepositoryI.class);
 
     private final static IOFileFilter DEFAULT_SKIP =
@@ -140,7 +145,10 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
     /**
      * Mimetype used to connote a directory {@link OriginalFile} object.
      */
-    public static String DIRECTORY_MIMETYPE = "Directory";
+    public static final String DIRECTORY_MIMETYPE = "Directory";
+
+    /** media type for import logs */
+    public static final String IMPORT_LOG_MIMETYPE = "application/omero-log-file";
 
     private /*final*/ long id;
 
@@ -162,7 +170,7 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
     public PublicRepositoryI(RepositoryDao repositoryDao,
             ChecksumProviderFactory checksumProviderFactory,
             String checksumAlgorithmSupported,
-            String pathRules) throws Exception {
+            String pathRules) throws ServerError {
         this.repositoryDao = repositoryDao;
         this.checksumProviderFactory = checksumProviderFactory;
         this.repoUuid = null;
@@ -476,13 +484,13 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
         }
 
     /**
-     * Should be refactored elsewhere.
-     * @param checkedPath 
-     * @param current
+     * Set the repository of the given original file to be this one.
+     * TODO: Should be refactored elsewhere.
+     * @param originalFileId the ID of the log file
+     * @param current the Ice method invocation context
      */
     @Deprecated
-    protected OriginalFile registerLogFile(final String repoUuid, final long filesetId,
-            final CheckedPath checkedPath, Ice.Current current)
+    protected ome.model.core.OriginalFile persistLogFile(final ome.model.core.OriginalFile originalFile, Ice.Current current)
                 throws ServerError {
 
         final Executor executor = this.context.getBean("executor", Executor.class);
@@ -490,35 +498,17 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
         final String session = ctx.get(omero.constants.SESSIONUUID.value);
         final String group = ctx.get(omero.constants.GROUP.value);
         final Principal principal = new Principal(session, group, null);
-        final String LOG_FILE_NS =
-                omero.constants.namespaces.NSLOGFILE.value;
 
         try {
-            FilesetAnnotationLink link = (FilesetAnnotationLink)
-                    executor.execute(ctx, principal, new Executor.SimpleWork(this, "setOriginalFileHasherToSHA1", id) {
+            return (ome.model.core.OriginalFile) executor.execute(ctx, principal,
+                    new Executor.SimpleWork(this, "persistLogFile", id) {
                 @Transactional(readOnly = false)
-                public Object doWork(Session session, ServiceFactory sf) {
-
-                    ome.model.core.OriginalFile logFile = null;
-                    try {
-                         logFile = repositoryDao.register(repoUuid,
-                            checkedPath, "text/plain", sf, getSqlAction());
-                    } catch (ServerError se) {
-                        throw new RuntimeException("Failed to register log file", se);
-                    }
-
-                    // use sf to get the services to link Fileset and the OriginalFile
-                    ome.api.IUpdate iUpdate = sf.getUpdateService();
-                    ome.model.annotations.FileAnnotation fa = new ome.model.annotations.FileAnnotation();
-                    fa.setNs(LOG_FILE_NS);
-                    fa.setFile(logFile.proxy());
-                    FilesetAnnotationLink fsl = new FilesetAnnotationLink();
-                    fsl.link(new ome.model.fs.Fileset(filesetId, false), fa);
-                    return iUpdate.saveAndReturnObject(fsl);
+                public ome.model.core.OriginalFile doWork(Session session, ServiceFactory sf) {
+                    final ome.model.core.OriginalFile persisted = sf.getUpdateService().saveAndReturnObject(originalFile);
+                    getSqlAction().setFileRepo(persisted.getId(), repoUuid);
+                    return persisted;
                 }
             });
-            FileAnnotation fs = (FileAnnotation) link.child();
-            return new OriginalFileI(fs.getFile().getId(), false);
         } catch (Exception e) {
             throw (ServerError) new IceMapper().handleException(e, executor.getContext());
         }
@@ -564,6 +554,21 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
         adjustedCurr.operation = __current.operation;
         adjustedCurr.id = new Ice.Identity(__current.id.name, sessionUuid);
         return adjustedCurr;
+    }
+
+    /**
+     * Provide a {@link Ice.Current} like the given one, except with the request context session UUID replaced.
+     * @param current an {@link Ice.Current} instance
+     * @param sessionUuid a new session UUID for the instance
+     * @return a new {@link Ice.Current} instance like the given one but with the new session UUID
+     */
+    protected Current sudo(Current current, String sessionUuid) {
+        final Current sudoCurrent =  makeAdjustedCurrent(current);
+        sudoCurrent.ctx = new HashMap<String, String>(current.ctx);
+        sudoCurrent.ctx.put(SUDO_REAL_SESSIONUUID, current.ctx.get(omero.constants.SESSIONUUID.value));
+        sudoCurrent.ctx.put(SUDO_REAL_GROUP_NAME, current.ctx.get(omero.constants.GROUP.value));
+        sudoCurrent.ctx.put(omero.constants.SESSIONUUID.value, sessionUuid);
+        return sudoCurrent;
     }
 
     /**
@@ -688,7 +693,8 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
     }
 
     public void makeDir(CheckedPath checked, boolean parents,
-            Session s, ServiceFactory sf, SqlAction sql) throws ServerError {
+            Session s, ServiceFactory sf, SqlAction sql,
+            ome.system.EventContext effectiveEventContext) throws ServerError {
 
         final LinkedList<CheckedPath> paths = new LinkedList<CheckedPath>();
         while (!checked.isRoot) {
@@ -708,7 +714,7 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
             }
         }
 
-        makeCheckedDirs(paths, parents, s, sf, sql);
+        makeCheckedDirs(paths, parents, s, sf, sql, effectiveEventContext);
 
     }
 
@@ -717,14 +723,13 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
      * the listed of {@link CheckedPath} instances before allowing the creation
      * of directories.
      *
-     * @param paths Not null, not empty.
+     * @param paths Not null, not empty. (Will be emptied by this method.)
      * @param parents "mkdir -p" like flag.
      * @param __current
      */
     protected void makeCheckedDirs(final LinkedList<CheckedPath> paths,
-            boolean parents, Session s, ServiceFactory sf, SqlAction sql)
-                    throws ResourceError,
-            ServerError {
+            boolean parents, Session s, ServiceFactory sf, SqlAction sql,
+            ome.system.EventContext effectiveEventContext) throws ServerError {
 
         CheckedPath checked;
 
@@ -746,9 +751,30 @@ public class PublicRepositoryI implements _RepositoryOperations, ApplicationCont
                 assertFindDir(checked, s, sf, sql);
 
             } else {
-                // This will fail if the file already exists in
-                repositoryDao.register(repoUuid, checked,
-                        DIRECTORY_MIMETYPE, sf, sql);
+                // This will fail if the directory already exists
+                try {
+                    repositoryDao.register(repoUuid, checked,
+                            DIRECTORY_MIMETYPE, sf, sql);
+                } catch (ValidationException ve) {
+                    if (ve.getCause() instanceof PSQLException) {
+                        // Could have collided with another thread also creating the directory.
+                        // See Trac #11096 regarding originalfile table uniqueness of columns repo, path, name.
+                        // So, give the other thread time to complete registration.
+                        SleepTimer.sleepFor(1000);
+                        if (checked.exists()) {
+                            // The path now exists! It did not a moment ago.
+                            // We are not going to rethrow the validation exception,
+                            // so we otherwise note that something unexpected did occur.
+                            log.warn("retrying after exception in registering directory " + checked + ": " + ve.getCause());
+                            // Another thread may have succeeded where this one failed,
+                            // so try this directory again.
+                            paths.add(0, checked);
+                            continue;
+                        }
+                    }
+                    // We cannot recover from the validation exception.
+                    throw ve;
+                }
             }
 
         }
