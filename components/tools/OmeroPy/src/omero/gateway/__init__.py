@@ -2543,7 +2543,7 @@ class _BlitzGateway (object):
         if result is not None:
             return wrapper(self, result)
 
-    def getObjects (self, obj_type, ids=None, params=None, attributes=None):
+    def getObjects (self, obj_type, ids=None, params=None, attributes=None, respect_order=False):
         """
         Retrieve Objects by type E.g. "Image"
         Returns generator of appropriate L{BlitzObjectWrapper} type. E.g. L{ImageWrapper}.
@@ -2556,10 +2556,17 @@ class _BlitzGateway (object):
         @type ids:          List of Long
         @param params:      omero.sys.Parameters, can be used for pagination, filtering etc.
         @param attributes:  Map of key-value pairs to filter results by. Key must be attribute of obj_type. E.g. 'name', 'ns'
+        @param respect_order:   Returned items will be ordered according to the order of ids
         @return:            Generator of L{BlitzObjectWrapper} subclasses
         """
         query, params, wrapper = self.buildQuery(obj_type, ids, params, attributes)
         result = self.getQueryService().findAllByQuery(query, params, self.SERVICE_OPTS)
+        if respect_order and ids is not None:
+            idMap = {}
+            for r in result:
+                idMap[r.id.val] = r
+            ids = unwrap(ids)       # in case we had a list of rlongs
+            result = [idMap.get(i) for i in ids if i in idMap]
         for r in result:
             yield wrapper(self, r)
 
@@ -5963,8 +5970,8 @@ class _ImageWrapper (BlitzObjectWrapper):
         ctx = self._conn.SERVICE_OPTS.copy()
 
         ctx.setOmeroGroup(self.details.group.id.val)
-        if self._conn.canBeAdmin():
-            ctx.setOmeroUser(self.details.owner.id.val)
+        #if self._conn.canBeAdmin():
+        #    ctx.setOmeroUser(self.details.owner.id.val)
         re.lookupPixels(pid, ctx)
         if rdid is None:
             rdid = self._getRDef()
@@ -6228,8 +6235,6 @@ class _ImageWrapper (BlitzObjectWrapper):
 
         ctx = self._conn.SERVICE_OPTS.copy()
         ctx.setOmeroGroup(self.details.group.id.val)
-        if self._conn.canBeAdmin():
-            ctx.setOmeroUser(self.details.owner.id.val)
         has_rendering_settings = tb.setPixelsId(pid, ctx)
         logger.debug("tb.setPixelsId(%d) = %s " % (pid, str(has_rendering_settings)))
         if rdid is not None:
@@ -6241,6 +6246,8 @@ class _ImageWrapper (BlitzObjectWrapper):
                 rdid = None
         if rdid is None:
             if not has_rendering_settings:
+                if self._conn.canBeAdmin():
+                   ctx.setOmeroUser(self.details.owner.id.val)
                 try:
                     tb.resetDefaults(ctx)      # E.g. May throw Missing Pyramid Exception
                 except omero.ConcurrencyException, ce:
@@ -7549,6 +7556,23 @@ class _ImageWrapper (BlitzObjectWrapper):
         ctx = self._conn.SERVICE_OPTS.copy()
         ctx.setOmeroGroup(self.details.group.id.val)
         self._re.saveCurrentSettings(ctx)
+        return True
+
+    @assert_re()
+    def resetDefaults(self):
+        if not self.canAnnotate():
+            return False
+        ns = self._conn.CONFIG.IMG_ROPTSNS
+        if ns:
+            opts = self._collectRenderOptions()
+            self.removeAnnotations(ns)
+            ann = omero.gateway.CommentAnnotationWrapper()
+            ann.setNs(ns)
+            ann.setValue('&'.join(['='.join(map(str, x)) for x in opts.items()]))
+            self.linkAnnotation(ann)
+        ctx = self._conn.SERVICE_OPTS.copy()
+        ctx.setOmeroGroup(self.details.group.id.val)
+        self._re.resetDefaults(ctx)
         return True
 
     def countArchivedFiles (self):
