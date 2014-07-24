@@ -51,7 +51,7 @@ public class SimpleLuceneOptions implements LuceneOptions {
         this.index = index;
     }
 
-    public Float getBoost() {
+    public float getBoost() {
         if (boost != null) {
             return boost;
         }
