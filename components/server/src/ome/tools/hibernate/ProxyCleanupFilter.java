@@ -15,6 +15,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.aopalliance.intercept.MethodInterceptor;
+import org.aopalliance.intercept.MethodInvocation;
+import org.hibernate.Hibernate;
+import org.hibernate.collection.internal.AbstractPersistentCollection;
+
 import ome.api.StatefulServiceInterface;
 import ome.model.IObject;
 import ome.model.internal.Details;
@@ -28,11 +33,6 @@ import ome.system.EventContext;
 import ome.util.ContextFilter;
 import ome.util.Filterable;
 import ome.util.Utils;
-
-import org.aopalliance.intercept.MethodInterceptor;
-import org.aopalliance.intercept.MethodInvocation;
-import org.hibernate.Hibernate;
-import org.hibernate.collection.AbstractPersistentCollection;
 
 /**
  * removes all proxies from a return graph to prevent ClassCastExceptions and
