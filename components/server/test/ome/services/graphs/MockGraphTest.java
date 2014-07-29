@@ -66,8 +66,8 @@ import omero.model.WellSample;
 import omero.model.WellSampleAnnotationLink;
 
 import org.hibernate.Session;
-import org.hibernate.engine.LoadQueryInfluencers;
-import org.hibernate.engine.SessionImplementor;
+import org.hibernate.engine.spi.LoadQueryInfluencers;
+import org.hibernate.engine.spi.SessionImplementor;
 import org.jmock.Mock;
 import org.jmock.MockObjectTestCase;
 import org.jmock.core.Invocation;

@@ -1,6 +1,6 @@
 package ome.tools.hibernate;
 
-import org.hibernate.Hibernate;
+import org.hibernate.type.LongType;
 import org.hibernate.dialect.function.SQLFunctionTemplate;
 
 /**
@@ -13,7 +13,7 @@ public class PostgresqlDialect extends org.hibernate.dialect.PostgreSQLDialect {
     public PostgresqlDialect() {
         super();
         registerFunction("temp_ids_cursor",
-                new SQLFunctionTemplate(Hibernate.LONG, "select id from table(temp_ids_cursor(?1))"));
+                new SQLFunctionTemplate(LongType.INSTANCE, "select id from table(temp_ids_cursor(?1))"));
 
     }
 
