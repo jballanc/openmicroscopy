@@ -102,7 +102,13 @@ def imageMarshal (image, key=None):
                      'imageId': image.id,
                      'pixelsType': image.getPixelsType(),
                     },
+            },
+            'perms': {'canAnnotate': image.canAnnotate(),
+                'canEdit': image.canEdit(),
+                'canDelete': image.canDelete(),
+                'canLink': image.canLink()
             }
+        }
     try:
         reOK = image._prepareRenderingEngine()
         if not reOK:
