@@ -13,7 +13,7 @@ import java.util.UUID;
 import org.hibernate.HibernateException;
 import org.hibernate.Query;
 import org.hibernate.Session;
-import org.springframework.orm.hibernate3.HibernateCallback;
+import org.springframework.orm.hibernate4.HibernateCallback;
 import org.testng.annotations.Test;
 
 import ome.model.meta.Experimenter;
