@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.NonWritableChannelException;
+import java.security.MessageDigest;
 import java.sql.SQLException;
 
 import ome.annotations.RolesAllowed;
@@ -49,7 +50,9 @@ import org.hibernate.HibernateException;
 import org.hibernate.Session;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.orm.hibernate3.HibernateCallback;
+import org.hibernate.HibernateException;
+import org.hibernate.Session;
+import org.springframework.orm.hibernate4.HibernateCallback;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.google.common.collect.ImmutableMap;
@@ -362,7 +365,7 @@ public class RawFileBean extends AbstractStatefulBean implements RawFileStore {
                 // use of ioService will not function.
                 String repo = (String) iQuery.execute(new HibernateCallback<String>(){
                     public String doInHibernate(Session arg0)
-                            throws HibernateException, SQLException {
+                            throws HibernateException {
                         return (String) arg0.createSQLQuery(
                                 "select repo from originalfile where id = ?")
                                 .setParameter(0, fileId)
