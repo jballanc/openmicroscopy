@@ -104,13 +104,6 @@
     <constructor-arg ref="sessionFactory"/>
   </bean>
 
-  <bean id="hibernateHandler" class="org.springframework.orm.hibernate3.HibernateInterceptor">
-    <description>
-    Scope: private
-    </description>
-    <property name="sessionFactory" ref="sessionFactory"/>
-  </bean>
-
   <bean id="omeroSessionFactory" class="ome.tools.hibernate.SessionFactory">
     <constructor-arg ref="sessionFactory"/>
     <constructor-arg ref="simpleSqlAction"/><!-- Used for ome_nextval -->
