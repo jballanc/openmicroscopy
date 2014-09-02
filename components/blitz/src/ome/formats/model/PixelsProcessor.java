@@ -167,9 +167,6 @@ public class PixelsProcessor implements ModelProcessor
             String imageName;
             if (image.getName() != null && image.getName().getValue() != null) {
                 imageName = image.getName().getValue().trim();
-                if (imageName.isEmpty()) {
-                    imageName = null;
-                }
             } else {
                 imageName = null;
             }
@@ -180,7 +177,9 @@ public class PixelsProcessor implements ModelProcessor
                     if (imageName == null) { 
                         imageName = Integer.toString(imageIndex);
                     }
-                    saveName += " [" + imageName + "]";
+                    if (!imageName.isEmpty()) {
+                      saveName += " [" + imageName + "]";
+                    }
                 }
             } else {
                 saveName = imageName;
