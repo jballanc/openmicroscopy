@@ -64,7 +64,7 @@ class DownloadControl(BaseControl):
         orig_files = self.get_files(client.sf, args.object)
         if filename and len(orig_files) > 1:
             self.ctx.die(603, 'Input image has more than 1 associated '
-                 'file: %s' % len(orig_files))
+                         'file: %s' % len(orig_files))
         for orig_file in orig_files:
             self.download_file(client, orig_file, args.directory, filename)
 
@@ -85,7 +85,6 @@ class DownloadControl(BaseControl):
         except omero.ResourceError, re:
             # ID exists in DB, but not on FS
             self.ctx.die(67, "ResourceError: %s" % re.message)
-
 
     def get_files(self, session, value):
 
@@ -132,7 +131,7 @@ class DownloadControl(BaseControl):
             query_out = query.projection(sql, params, {'omero.group': '-1'})
             if not query_out:
                 self.ctx.die(602, 'Input image has no associated Fileset')
-            return [unwrap(ofile)[0] for ofile in query_out]
+            return [unwrap(of)[0] for of in query_out]
 
         self.ctx.die(601, 'Invalid object input')
 
