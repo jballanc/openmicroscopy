@@ -2,12 +2,19 @@
 # -*- coding: utf-8 -*-
 """
 
-   Copyright 2010 Glencoe Software, Inc. All rights reserved.
+   Copyright 2010-2014 Glencoe Software, Inc. All rights reserved.
    Use is subject to license terms supplied in LICENSE.txt
 
 """
 
-import Ice, IceImport
+# This file is an import-only file providing a mechanism for other files to
+# import a range of modules in a controlled way. It could be made to pass
+# flake8 but given its simplicity it is being marked as noqa for now.
+#
+# flake8: noqa
+
+import Ice
+import IceImport
 import omero
 if omero.__import_style__ is None:
     omero.__import_style__ = "all"
@@ -48,9 +55,11 @@ if omero.__import_style__ is None:
     IceImport.load("omero_api_RenderingEngine_ice")
     IceImport.load("omero_api_Search_ice")
     IceImport.load("omero_api_ThumbnailStore_ice")
+    IceImport.load("omero_cmd_Admin_ice")
     IceImport.load("omero_cmd_API_ice")
     IceImport.load("omero_cmd_Basic_ice")
     IceImport.load("omero_cmd_FS_ice")
     IceImport.load("omero_cmd_Graphs_ice")
+    IceImport.load("omero_cmd_Mail_ice")
     import omero_sys_ParametersI
     import omero_model_PermissionsI

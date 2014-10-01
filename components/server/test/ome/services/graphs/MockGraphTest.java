@@ -28,6 +28,7 @@ import ome.model.annotations.FileAnnotation;
 import ome.model.annotations.ImageAnnotationLink;
 import ome.model.annotations.ListAnnotation;
 import ome.model.annotations.LongAnnotation;
+import ome.model.annotations.MapAnnotation;
 import ome.model.annotations.NumericAnnotation;
 import ome.model.annotations.ProjectAnnotationLink;
 import ome.model.annotations.RoiAnnotationLink;
@@ -63,7 +64,6 @@ import omero.model.Well;
 import omero.model.WellAnnotationLink;
 import omero.model.WellReagentLink;
 import omero.model.WellSample;
-import omero.model.WellSampleAnnotationLink;
 
 import org.hibernate.Session;
 import org.hibernate.engine.spi.LoadQueryInfluencers;
@@ -139,10 +139,13 @@ public class MockGraphTest extends MockObjectTestCase {
                                 ListAnnotation.class,
                                 TextAnnotation.class,
                                 CommentAnnotation.class,
+                                MapAnnotation.class,
                                 ome.model.annotations.TagAnnotation.class,
                                 XmlAnnotation.class,
                                 TypeAnnotation.class,
                                 FileAnnotation.class))));
+        emMock.expects(atLeastOnce()).method("getHibernateClass").will(
+                returnValue(IObject.class));
         specXml = new OmeroContext(
                 new String[] { "classpath:ome/services/spec.xml" }, sac);
     }
@@ -164,7 +167,7 @@ public class MockGraphTest extends MockObjectTestCase {
     }
 
     protected GraphStep step(String type, Class<? extends IObject> k, long id) {
-        return step(type, k, id, new long[0]);
+        return step(type, k, id, null);
     }
 
     protected GraphStep step(String type, Class<? extends IObject> k, long id, long[] ids) {
@@ -309,12 +312,7 @@ public class MockGraphTest extends MockObjectTestCase {
         values.put("RenderingDef", "settings");
         values.put("Channel", "channels");
         values.put("Thumbnail", "thumbnails");
-        values.put("PixelsAnnotationLink", "annotationLinks");
         relationships.put("Pixels", values);
-
-        values = new HashMap<String, String>();
-        values.put("Annotation", "child");
-        relationships.put("PixelsAnnotationLink", values);
 
         values = new HashMap<String, String>();
         values.put("ChannelAnnotationLink", "annotationLinks");
@@ -414,13 +412,8 @@ public class MockGraphTest extends MockObjectTestCase {
         relationships.put("WellAnnotationLink", values);
 
         values = new HashMap<String, String>();
-        values.put("WellSampleAnnotationLink", "annotationLinks");
         values.put("Image", "image");
         relationships.put("WellSample", values);
-
-        values = new HashMap<String, String>();
-        values.put("Annotation", "child");
-        relationships.put("WellSampleAnnotationLink", values);
 
 
         // INSTRUMENTS
@@ -575,8 +568,6 @@ public class MockGraphTest extends MockObjectTestCase {
                     return WellReagentLink.class;
                 } else if (name.equals("WellSample")) {
                     return WellSample.class;
-                } else if (name.equals("WellSampleAnnotationLink")) {
-                    return WellSampleAnnotationLink.class;
                 } else if (name.equals("Reagent")) {
                     return Reagent.class;
                 } else if (name.equals("ReagentAnnotationLink")) {

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 #
-# Copyright (C) 2013 University of Dundee & Open Microscopy Environment.
+# Copyright (C) 2013-2014 University of Dundee & Open Microscopy Environment.
 # All rights reserved.
 #
 # This program is free software; you can redistribute it and/or modify
@@ -60,14 +60,6 @@ class TestDownload(CLITest):
         self.add_groups(user, [group1, group2], owner=True)
         return user, group1, group2
 
-    @pytest.mark.parametrize(
-        'bad_input',
-        ['-1', 'OriginalFile:-1', 'FileAnnotation:-1', 'Image:-1'])
-    def testInvalidInput(self, bad_input):
-        self.args += [bad_input, '-']
-        with pytest.raises(NonZeroReturnCode):
-            self.cli.invoke(self.args, strict=True)
-
     # OriginalFile tests
     # ========================================================================
     @pytest.mark.parametrize('prefix', ['', 'OriginalFile:'])
@@ -97,7 +89,7 @@ class TestDownload(CLITest):
     @pytest.mark.parametrize('prefix', ['', 'OriginalFile:'])
     def testOriginalFileMultipleGroups(self, prefix, capsys):
         user, group1, group2 = self.setup_user_and_two_groups()
-        client = self.new_client(user=user, password="ome")
+        client = self.new_client(user=user)
         ofile = self.create_original_file("test")
         self.set_context(client, group2.id.val)
         self.args += ['%s%s' % (prefix, str(ofile.id.val)), '-']
@@ -139,7 +131,7 @@ class TestDownload(CLITest):
 
     def testFileAnnotationMultipleGroups(self, capsys):
         user, group1, group2 = self.setup_user_and_two_groups()
-        client = self.new_client(user=user, password="ome")
+        client = self.new_client(user=user)
         ofile = self.create_original_file("test")
         fa = omero.model.FileAnnotationI()
         fa.setFile(ofile)
@@ -197,7 +189,7 @@ class TestDownload(CLITest):
 
     def testImageMultipleGroups(self, tmpdir):
         user, group1, group2 = self.setup_user_and_two_groups()
-        client = self.new_client(user=user, password="ome")
+        client = self.new_client(user=user)
         filename = self.OmeroPy / ".." / ".." / ".." / \
             "components" / "common" / "test" / "tinyTest.d3d.dv"
         with open(filename) as f:

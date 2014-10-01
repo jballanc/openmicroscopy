@@ -82,11 +82,9 @@ class TestImport(CLITest):
         self.add_client_dir()
 
     def set_conn_args(self):
-        passwd = self.root.getProperty("omero.rootpass")
         host = self.root.getProperty("omero.host")
         port = self.root.getProperty("omero.port")
-        self.args = ["import", "-w", passwd]
-        self.args += ["-s", host, "-p",  port]
+        self.args = ["import", "-s", host, "-p",  port]
         self.add_client_dir()
 
     def add_client_dir(self):
@@ -290,14 +288,12 @@ class TestImport(CLITest):
         levels = self.parse_debug_levels(o)
         assert set(levels) <= set(debug_levels[debug_levels.index(level):])
 
-    def testSummaryArgument(self, tmpdir, capfd):
-        """Test import summary argument"""
+    def testImportSummary(self, tmpdir, capfd):
+        """Test import summary output"""
         fakefile = tmpdir.join("test.fake")
         fakefile.write('')
 
         self.args += [str(fakefile)]
-        self.args += ['--summary']
-        # Invoke CLI import command and retrieve stdout/stderr
         self.cli.invoke(self.args, strict=True)
         o, e = capfd.readouterr()
         summary = self.parse_summary(e)
@@ -305,15 +301,13 @@ class TestImport(CLITest):
         assert len(summary) == 5
 
     @pytest.mark.parametrize("plate", [1, 2, 3])
-    def testSummaryArgumentWithScreen(self, tmpdir, capfd, plate):
+    def testImportSummaryWithScreen(self, tmpdir, capfd, plate):
         """Test import summary argument with a screen"""
         fakefile = tmpdir.join("SPW&plates=%d&plateRows=1&plateCols=1&"
                                "fields=1&plateAcqs=1.fake" % plate)
         fakefile.write('')
 
         self.args += [str(fakefile)]
-        self.args += ['--summary']
-        # Invoke CLI import command and retrieve stdout/stderr
         self.cli.invoke(self.args, strict=True)
         o, e = capfd.readouterr()
         summary = self.parse_summary(e)
@@ -332,6 +326,7 @@ class TestImport(CLITest):
         # Create argument list using sudo
         self.set_conn_args()
         self.args += ['--sudo', 'root']
+        self.args += ["-w", self.root.getProperty("omero.rootpass")]
         self.args += ["-u", user.omeName.val]
         self.args += [str(fakefile)]
 
@@ -354,6 +349,7 @@ class TestImport(CLITest):
         # Create argument list
         self.set_conn_args()
         self.args += ["-u", user.omeName.val]
+        self.args += ["-w", user.omeName.val]
         self.args += ["-g", group2.name.val]
         self.args += [str(fakefile)]
 
@@ -377,6 +373,7 @@ class TestImport(CLITest):
         # Create argument list using sudo
         self.set_conn_args()
         self.args += ['--sudo', 'root']
+        self.args += ["-w", self.root.getProperty("omero.rootpass")]
         self.args += ["-u", user.omeName.val, "-g", group2.name.val]
         self.args += [str(fakefile)]
 
