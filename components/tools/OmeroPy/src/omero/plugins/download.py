@@ -14,6 +14,7 @@
 import sys
 import omero
 import re
+import os
 from omero.cli import BaseControl, CLI
 from omero.rtypes import unwrap
 
@@ -42,26 +43,41 @@ class DownloadControl(BaseControl):
         parser.add_argument(
             "object", help="Object to download of form <object>:<id>. "
             "OriginalFile is assumed if <object>: is omitted.")
+        # Allow optional filename for backwards compatibility
         parser.add_argument(
-            "filename", help="Local filename to be saved to. '-' for stdout")
+            "fname", nargs="?", default=None, metavar='filename',
+            help="Local filename to be saved to. '-' for stdout")
+        parser.add_argument(
+            "-f", "--filename",
+            help="Local filename to be saved to. '-' for stdout")
+        parser.add_argument(
+            "-d", "--directory",
+            help="Directory to save files to.  Default is current directory.")
         parser.set_defaults(func=self.__call__)
         parser.add_login_arguments()
 
     def __call__(self, args):
-        from omero_model_OriginalFileI import OriginalFileI as OFile
-
         # Retrieve connection
         client = self.ctx.conn(args)
-        file_id = self.get_file_id(client.sf, args.object)
-        orig_file = OFile(file_id)
-        target_file = str(args.filename)
+        filename = args.filename or args.fname
+        # if a file name is specified, we can only download a single file
+        orig_files = self.get_files(client.sf, args.object)
+        if filename and len(orig_files) > 1:
+            self.ctx.die(603, 'Input image has more than 1 associated '
+                 'file: %s' % len(orig_files))
+        for orig_file in orig_files:
+            self.download_file(client, orig_file, args.directory, filename)
 
+    def download_file(self, client, orig_file, target_directory, target_file):
         try:
             if target_file == "-":
                 client.download(orig_file, filehandle=sys.stdout)
                 sys.stdout.flush()
             else:
-                client.download(orig_file, target_file)
+                output_filename = os.path.join(
+                    target_directory or ".",
+                    target_file or unwrap(orig_file.name))
+                client.download(orig_file, output_filename)
         except omero.ValidationException, ve:
             # Possible, though unlikely after previous check
             self.ctx.die(67, "Unknown ValidationException: %s"
@@ -70,14 +86,15 @@ class DownloadControl(BaseControl):
             # ID exists in DB, but not on FS
             self.ctx.die(67, "ResourceError: %s" % re.message)
 
-    def get_file_id(self, session, value):
+
+    def get_files(self, session, value):
 
         query = session.getQueryService()
         if ':' not in value:
             try:
                 ofile = query.get("OriginalFile", long(value),
                                   {'omero.group': '-1'})
-                return ofile.id.val
+                return [ofile]
             except ValueError:
                 self.ctx.die(601, 'Invalid OriginalFile ID input')
             except omero.ValidationException:
@@ -91,7 +108,7 @@ class DownloadControl(BaseControl):
                                   {'omero.group': '-1'})
             except omero.ValidationException:
                 self.ctx.die(601, 'No OriginalFile with input ID')
-            return ofile.id.val
+            return [ofile]
 
         # Assume input is of form FileAnnotation:id
         fa_id = self.parse_object_id("FileAnnotation", value)
@@ -100,7 +117,7 @@ class DownloadControl(BaseControl):
                 fa = query.get("FileAnnotation", fa_id, {'omero.group': '-1'})
             except omero.ValidationException:
                 self.ctx.die(601, 'No FileAnnotation with input ID')
-            return fa.getFile().id.val
+            return [fa.getFile()]
 
         # Assume input is of form Image:id
         image_id = self.parse_object_id("Image", value)
@@ -115,10 +132,7 @@ class DownloadControl(BaseControl):
             query_out = query.projection(sql, params, {'omero.group': '-1'})
             if not query_out:
                 self.ctx.die(602, 'Input image has no associated Fileset')
-            if len(query_out) > 1:
-                self.ctx.die(603, 'Input image has more than 1 associated '
-                             'file: %s' % len(query_out))
-            return unwrap(query_out[0])[0].id.val
+            return [unwrap(ofile)[0] for ofile in query_out]
 
         self.ctx.die(601, 'Invalid object input')
 
