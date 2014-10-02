@@ -40,6 +40,7 @@ import omero.cmd.graphs.DeleteI;
 import omero.cmd.graphs.Delete2I;
 import omero.cmd.graphs.GraphRequestFactory;
 import omero.cmd.graphs.GraphSpecListI;
+import omero.cmd.graphs.SkipHeadI;
 
 /**
  * SPI type picked up from the Spring configuration and given a chance to
@@ -169,6 +170,14 @@ public class RequestObjectFactoryRegistry extends
                     @Override
                     public Ice.Object create(String name) {
                         return graphRequestFactory.getRequest(Delete2I.class);
+                    }
+
+                });
+        factories.put(SkipHeadI.ice_staticId(),
+                new ObjectFactory(SkipHeadI.ice_staticId()) {
+                    @Override
+                    public Ice.Object create(String name) {
+                        return graphRequestFactory.getRequest(SkipHeadI.class);
                     }
 
                 });
