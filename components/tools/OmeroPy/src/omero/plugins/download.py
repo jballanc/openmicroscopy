@@ -53,6 +53,15 @@ class DownloadControl(BaseControl):
         parser.add_argument(
             "-d", "--directory",
             help="Directory to save files to.  Default is current directory.")
+        parser.add_argument(
+            "-c", "--clientpath",
+            nargs="?", default=None, const=-1, type=int, metavar='levels',
+            help="Recreate client path to optional number of levels "
+            "(only valid for Image:...)")
+        parser.add_argument(
+            "--dryrun", action="store_true",
+            help="Print files that would be downloaded"
+        )
         parser.set_defaults(func=self.__call__)
         parser.add_login_arguments()
 
@@ -61,23 +70,55 @@ class DownloadControl(BaseControl):
         client = self.ctx.conn(args)
         filename = args.filename or args.fname
         # if a file name is specified, we can only download a single file
-        orig_files = self.get_files(client.sf, args.object)
-        if filename and len(orig_files) > 1:
+        files = self.get_files(client.sf, args.object)
+        if filename and len(files) > 1:
             self.ctx.die(603, 'Input image has more than 1 associated '
-                         'file: %s' % len(orig_files))
-        for orig_file in orig_files:
-            self.download_file(client, orig_file, args.directory, filename)
+                         'file: %s' % len(files))
+        for entry in files:
+            # entry is either a filesetentry or an originalfile
+            orig_file = getattr(entry, 'originalFile', entry)
+            # filesetentry has a clientpath we may need
+            clientpath = getattr(entry, 'clientPath', '')
+            if clientpath:
+                clientpath = unwrap(clientpath)
+            # always remove drive information and file name
+            clientpath = os.path.splitdrive(os.path.dirname(clientpath))[1]
 
-    def download_file(self, client, orig_file, target_directory, target_file):
+            # calculate target directory
+            target = args.directory or "."
+            if args.clientpath:
+                if args.clientpath > 0:
+                    use = ''
+                    for count in range(args.clientpath):
+                        clientpath, tail = os.path.split(clientpath)
+                        use = os.path.join(tail, use)
+                    clientpath = use
+                target = os.path.join(target, clientpath)
+
+            target_file = filename or unwrap(orig_file.name)
+            if target_file != "-":
+                target_file = os.path.normpath(
+                    os.path.join(target, target_file))
+
+            if args.dryrun:
+                print "ID %s: %s" % (
+                    unwrap(orig_file.id),
+                    "stdout" if target_file == "-" else target_file)
+            else:
+                # create output directory
+                target_dir = os.path.dirname(target_file)
+                if target_file != "-" and not os.path.exists(target_dir):
+                    os.makedirs(target_dir)
+                # perform download
+                self.download_file(client, orig_file, target_file)
+
+    def download_file(self, client, orig_file, target_file):
         try:
             if target_file == "-":
                 client.download(orig_file, filehandle=sys.stdout)
                 sys.stdout.flush()
             else:
-                output_filename = os.path.join(
-                    target_directory or ".",
-                    target_file or unwrap(orig_file.name))
-                client.download(orig_file, output_filename)
+                client.download(orig_file, target_file)
         except omero.ValidationException, ve:
             # Possible, though unlikely after previous check
             self.ctx.die(67, "Unknown ValidationException: %s"
@@ -87,7 +128,7 @@ class DownloadControl(BaseControl):
             self.ctx.die(67, "ResourceError: %s" % re.message)
 
     def get_files(self, session, value):
-
+        # returns a list of OriginalFile or FileSetEntry
         query = session.getQueryService()
         if ':' not in value:
             try:
@@ -123,15 +164,15 @@ class DownloadControl(BaseControl):
         params = omero.sys.ParametersI()
         if image_id:
             params.addLong('iid', image_id)
-            sql = "select f from Image i" \
+            sql = "select uf from Image i" \
                 " left outer join i.fileset as fs" \
                 " join fs.usedFiles as uf" \
-                " join uf.originalFile as f" \
+                " join fetch uf.originalFile as f" \
                 " where i.id = :iid"
             query_out = query.projection(sql, params, {'omero.group': '-1'})
             if not query_out:
                 self.ctx.die(602, 'Input image has no associated Fileset')
-            return [unwrap(of)[0] for of in query_out]
+            return [unwrap(fsentry)[0] for fsentry in query_out]
 
         self.ctx.die(601, 'Invalid object input')
 
