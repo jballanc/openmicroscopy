@@ -18,22 +18,20 @@ import os
 from omero.cli import BaseControl, CLI
 from omero.rtypes import unwrap
 
-HELP = """Download the given file with a specified ID to a target file with
-a specified filename.
+HELP = """Download the given file(s) with a specified ID
 
 Examples:
 
     # Download OriginalFile 2 to local_file
-    bin/omero download 2 local_file
+    bin/omero download 2 -f local_file
     # Download Original File 2 to the stdout
-    bin/omero download 2 -
+    bin/omero download 2 -f -
 
-    # Download the OriginalFile linked to FileAnnotation 20 to local_file
-    bin/omero download FileAnnotation:20 local_file
+    # Download the OriginalFile linked to FileAnnotation 20
+    bin/omero download FileAnnotation:20
 
-    # Download the OriginalFile linked to Image 5
-    # Works only with single files imported with OMERO 5.0.0 and above
-    bin/omero download Image:5 original_image
+    # Download all OriginalFiles linked to Images 5 and 6
+    bin/omero download Image:5,Image:6
 """
 
 
@@ -42,7 +40,8 @@ class DownloadControl(BaseControl):
     def _configure(self, parser):
         parser.add_argument(
             "object", help="Object to download of form <object>:<id>. "
-            "OriginalFile is assumed if <object>: is omitted.")
+            "OriginalFile is assumed if <object>: is omitted. "
+            "Multiple objects can be specified separated by comma.")
         # Allow optional filename for backwards compatibility
         parser.add_argument(
             "fname", nargs="?", default=None, metavar='filename',
@@ -57,7 +56,7 @@ class DownloadControl(BaseControl):
             "-c", "--clientpath",
             nargs="?", default=None, const=-1, type=int, metavar='levels',
             help="Recreate client path to optional number of levels "
-            "(only valid for Image:...)")
+            "(only used for Image:...)")
         parser.add_argument(
             "--dryrun", action="store_true",
             help="Print files that would be downloaded"
@@ -68,9 +67,18 @@ class DownloadControl(BaseControl):
     def __call__(self, args):
         # Retrieve connection
         client = self.ctx.conn(args)
+        objects = args.object.split(",")
+        # if a file name is specified, we can only download a single object
         filename = args.filename or args.fname
+        if filename and len(objects) > 1:
+            self.ctx.die(603, 'Cannot specify filename for multiple objects')
+        for obj in objects:
+            self.process_file(obj, client, args)
+
+    def process_file(self, obj, client, args):
+        files = self.get_files(client.sf, obj)
         # if a file name is specified, we can only download a single file
-        files = self.get_files(client.sf, args.object)
+        filename = args.filename or args.fname
         if filename and len(files) > 1:
             self.ctx.die(603, 'Input image has more than 1 associated '
                          'file: %s' % len(files))
