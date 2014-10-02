@@ -31,21 +31,26 @@ Examples:
     bin/omero download FileAnnotation:20
 
     # Download all OriginalFiles linked to Images 5 and 6
-    bin/omero download Image:5,Image:6
+    bin/omero download --objects Image:5 Image:6
 """
 
 
 class DownloadControl(BaseControl):
 
     def _configure(self, parser):
+        # Allow single object for backwards compatibility
         parser.add_argument(
-            "object", help="Object to download of form <object>:<id>. "
-            "OriginalFile is assumed if <object>: is omitted. "
-            "Multiple objects can be specified separated by comma.")
+            "object", nargs="?",
+            help="Object to download of form <object>:<id>. "
+            "OriginalFile is assumed if <object>: is omitted.")
         # Allow optional filename for backwards compatibility
         parser.add_argument(
             "fname", nargs="?", default=None, metavar='filename',
             help="Local filename to be saved to. '-' for stdout")
+        parser.add_argument(
+            "-o", "--object", nargs="+", dest="objects", metavar="OBJECT",
+            help="Objects to download of form <object>:<id>. "
+            "OriginalFile is assumed if <object>: is omitted.")
         parser.add_argument(
             "-f", "--filename",
             help="Local filename to be saved to. '-' for stdout")
@@ -54,7 +59,7 @@ class DownloadControl(BaseControl):
             help="Directory to save files to.  Default is current directory.")
         parser.add_argument(
             "-c", "--clientpath",
-            nargs="?", default=None, const=-1, type=int, metavar='levels',
+            nargs="?", default=None, const=-1, type=int, metavar='LEVELS',
             help="Recreate client path to optional number of levels "
             "(only used for Image:...)")
         parser.add_argument(
@@ -67,7 +72,11 @@ class DownloadControl(BaseControl):
     def __call__(self, args):
         # Retrieve connection
         client = self.ctx.conn(args)
-        objects = args.object.split(",")
+        objects = args.objects or []
+        if args.object:
+            objects.append(args.object)
+        if not objects:
+            self.ctx.die(601, 'Must specify at least one object')
         # if a file name is specified, we can only download a single object
         filename = args.filename or args.fname
         if filename and len(objects) > 1:
@@ -80,8 +89,8 @@ class DownloadControl(BaseControl):
         # if a file name is specified, we can only download a single file
         filename = args.filename or args.fname
         if filename and len(files) > 1:
-            self.ctx.die(603, 'Input image has more than 1 associated '
-                         'file: %s' % len(files))
+            self.ctx.die(603, 'Cannot specify filename if input image has '
+                         'more than 1 associated file, it has %s' % len(files))
         for entry in files:
             # entry is either a filesetentry or an originalfile
             orig_file = getattr(entry, 'originalFile', entry)
