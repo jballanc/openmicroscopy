@@ -211,3 +211,12 @@ class TestDownload(CLITest):
         with open(str(tmpfile)) as f:
             bytes2 = f.read()
         assert bytes1 == bytes2
+
+    def testImageDefaultDirectory(self, tmpdir):
+        image = self.importSingleImageWithCompanion()
+        olddir = tmpdir.chdir()
+        try:
+            self.args += ["Image:%s" % image.id.val]
+            self.cli.invoke(self.args, strict=True)
+        finally:
+            olddir.chdir()

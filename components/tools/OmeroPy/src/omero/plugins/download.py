@@ -129,7 +129,8 @@ class DownloadControl(BaseControl):
             else:
                 # create output directory
                 target_dir = os.path.dirname(target_file)
-                if target_file != "-" and not os.path.exists(target_dir):
+                if target_dir and target_file != "-" and \
+                        not os.path.exists(target_dir):
                     os.makedirs(target_dir)
                 # perform download
                 self.download_file(client, orig_file, target_file)
