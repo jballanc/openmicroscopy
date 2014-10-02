@@ -81,6 +81,8 @@ class DownloadControl(BaseControl):
         filename = args.filename or args.fname
         if filename and len(objects) > 1:
             self.ctx.die(603, 'Cannot specify filename for multiple objects')
+        # remember what's been downloaded
+        self.history = []
         for obj in objects:
             self.process_file(obj, client, args)
 
@@ -94,6 +96,10 @@ class DownloadControl(BaseControl):
         for entry in files:
             # entry is either a filesetentry or an originalfile
             orig_file = getattr(entry, 'originalFile', entry)
+            orig_file_id = unwrap(orig_file.id)
+            if orig_file_id in self.history:
+                continue
+            self.history.append(orig_file_id)
             # filesetentry has a clientpath we may need
             clientpath = getattr(entry, 'clientPath', '')
             if clientpath:
@@ -119,8 +125,7 @@ class DownloadControl(BaseControl):
 
             if args.dryrun:
                 print "ID %s: %s" % (
-                    unwrap(orig_file.id),
-                    "stdout" if target_file == "-" else target_file)
+                    orig_file_id, "stdout" if target_file == "-" else target_file)
             else:
                 # create output directory
                 target_dir = os.path.dirname(target_file)
