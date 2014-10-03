@@ -84,8 +84,8 @@ class DownloadControl(BaseControl):
             self.ctx.die(603, 'Cannot specify filename for multiple objects')
         # remember what's been downloaded
         self.history = {
-            'id': [],
-            'name': [],
+            'id': {},
+            'name': {},
         }
         for obj in objects:
             self.process_file(obj, client, args)
@@ -103,8 +103,12 @@ class DownloadControl(BaseControl):
             orig_file_id = unwrap(orig_file.id)
             # Don't download same OriginalFile more than once
             if orig_file_id in self.history['id']:
+                prev_obj = self.history['id'][orig_file_id]
+                self.ctx.err('Object %s OriginalFile %s: WARNING: '
+                             'already written for object %s, '
+                             'skipping' % (obj, orig_file_id, prev_obj))
                 continue
-            self.history['id'].append(orig_file_id)
+            self.history['id'][orig_file_id] = obj
             # filesetentry has a clientpath we may need
             clientpath = getattr(entry, 'clientPath', '')
             if clientpath:
@@ -130,14 +134,18 @@ class DownloadControl(BaseControl):
 
             # check if file would overwrite previously downloaded file
             if target_file in self.history['name']:
-                self.ctx.out('Warning: ID %s: file "%s" written previously, '
-                             'skipping' % (orig_file_id, target_file))
+                prev_obj, prev_id = self.history['name'][target_file]
+                self.ctx.err('Object %s OriginalFile %s: WARNING: '
+                             'file "%s" written previously '
+                             'for object %s (OriginalFile %s), '
+                             'skipping' % (obj, orig_file_id, target_file,
+                                           prev_obj, prev_id))
                 continue
-            self.history['name'].append(target_file)
+            self.history['name'][target_file] = (obj, orig_file_id)
 
             if args.dryrun:
-                self.ctx.out("ID %s: %s" % (
-                    orig_file_id,
+                self.ctx.out('Object %s OriginalFile %s: Writing "%s"' % (
+                    obj, orig_file_id,
                     "stdout" if target_file == "-" else target_file))
             else:
                 # create output directory
