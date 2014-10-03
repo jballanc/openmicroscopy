@@ -23,11 +23,12 @@ HELP = """Download the given file(s) with a specified ID
 Examples:
 
     # Download OriginalFile 2 to local_file
-    bin/omero download 2 -f local_file
+    bin/omero download 2 --filename local_file
     # Download Original File 2 to the stdout
-    bin/omero download 2 -f -
+    bin/omero download 2 -
 
     # Download the OriginalFile linked to FileAnnotation 20
+    # to a file named with the original file name
     bin/omero download FileAnnotation:20
 
     # Download all OriginalFiles linked to Images 5 and 6
