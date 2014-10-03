@@ -130,14 +130,15 @@ class DownloadControl(BaseControl):
 
             # check if file would overwrite previously downloaded file
             if target_file in self.history['name']:
-                self.ctx.out('Warning: ID %s: file "%s" written previously, skipping' %
-                             (orig_file_id, target_file))
+                self.ctx.out('Warning: ID %s: file "%s" written previously, '
+                             'skipping' % (orig_file_id, target_file))
                 continue
             self.history['name'].append(target_file)
 
             if args.dryrun:
                 self.ctx.out("ID %s: %s" % (
-                    orig_file_id, "stdout" if target_file == "-" else target_file))
+                    orig_file_id,
+                    "stdout" if target_file == "-" else target_file))
             else:
                 # create output directory
                 target_dir = os.path.dirname(target_file)
