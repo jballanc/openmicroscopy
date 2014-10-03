@@ -64,8 +64,12 @@ class DownloadControl(BaseControl):
             help="Recreate client path to optional number of levels "
             "(only used for Image:...)")
         parser.add_argument(
+            "-v", "--verbose", action="store_true",
+            help="Print information as files are downloaded"
+        )
+        parser.add_argument(
             "--dryrun", action="store_true",
-            help="Print files that would be downloaded"
+            help="Don't perform actual downloads"
         )
         parser.set_defaults(func=self.__call__)
         parser.add_login_arguments()
@@ -143,11 +147,12 @@ class DownloadControl(BaseControl):
                 continue
             self.history['name'][target_file] = (obj, orig_file_id)
 
-            if args.dryrun:
-                self.ctx.out('Object %s OriginalFile %s: Writing "%s"' % (
+            if args.verbose:
+                self.ctx.err('Object %s OriginalFile %s: Writing "%s"' % (
                     obj, orig_file_id,
                     "stdout" if target_file == "-" else target_file))
-            else:
+
+            if not args.dryrun:
                 # create output directory
                 target_dir = os.path.dirname(target_file)
                 if target_dir and target_file != "-" and \
