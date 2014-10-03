@@ -125,8 +125,8 @@ class DownloadControl(BaseControl):
                     os.path.join(target, target_file))
 
             if args.dryrun:
-                print "ID %s: %s" % (
-                    orig_file_id, "stdout" if target_file == "-" else target_file)
+                self.ctx.out("ID %s: %s" % (
+                    orig_file_id, "stdout" if target_file == "-" else target_file))
             else:
                 # create output directory
                 target_dir = os.path.dirname(target_file)
