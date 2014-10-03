@@ -31,7 +31,7 @@ Examples:
     bin/omero download FileAnnotation:20
 
     # Download all OriginalFiles linked to Images 5 and 6
-    bin/omero download --objects Image:5 Image:6
+    bin/omero download --object Image:5 Image:6
 """
 
 
