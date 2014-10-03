@@ -83,7 +83,10 @@ class DownloadControl(BaseControl):
         if filename and len(objects) > 1:
             self.ctx.die(603, 'Cannot specify filename for multiple objects')
         # remember what's been downloaded
-        self.history = []
+        self.history = {
+            'id': [],
+            'name': [],
+        }
         for obj in objects:
             self.process_file(obj, client, args)
 
@@ -98,9 +101,10 @@ class DownloadControl(BaseControl):
             # entry is either a filesetentry or an originalfile
             orig_file = getattr(entry, 'originalFile', entry)
             orig_file_id = unwrap(orig_file.id)
-            if orig_file_id in self.history:
+            # Don't download same OriginalFile more than once
+            if orig_file_id in self.history['id']:
                 continue
-            self.history.append(orig_file_id)
+            self.history['id'].append(orig_file_id)
             # filesetentry has a clientpath we may need
             clientpath = getattr(entry, 'clientPath', '')
             if clientpath:
@@ -123,6 +127,13 @@ class DownloadControl(BaseControl):
             if target_file != "-":
                 target_file = os.path.normpath(
                     os.path.join(target, target_file))
+
+            # check if file would overwrite previously downloaded file
+            if target_file in self.history['name']:
+                self.ctx.out('Warning: ID %s: file "%s" written previously, skipping' %
+                             (orig_file_id, target_file))
+                continue
+            self.history['name'].append(target_file)
 
             if args.dryrun:
                 self.ctx.out("ID %s: %s" % (
