@@ -30,7 +30,6 @@
     <dependency org="zeroc" name="ice-db" rev="${versions.ice}"/>
     <dependency org="zeroc" name="ice-freeze" rev="${versions.ice}"/>
     <!-- j2ee replacements : jta, jndi, etc. -->
-    <dependency org="geronimo-spec" name="geronimo-spec-jta" rev="1.0.1B-rc4"/>
     <dependency org="org.codehaus.btm" name="btm" rev="${versions.btm}"/>
     <!-- Public -->
     <dependency org="batik" name="batik-all" rev="${versions.batik}"/>
@@ -47,6 +46,7 @@
     <dependency org="xml-apis" name="xml-apis-ext" rev="${versions.xml-apis}"/>
     <dependency org="javax.mail" name="mail" rev="${versions.mail}"/>
     <dependency org="javax.activation" name="activation" rev="${versions.activation}"/>
+    <dependency org="javax.transaction" name="javax.transaction-api" rev="${versions.jta}"/>
     <dependency org="pdfbox" name="pdfbox" rev="${versions.pdfbox}"/><!--now org.apache.pdfbox -->
     <dependency org="org.fontbox" name="fontbox" rev="${versions.fontbox}"/>
     <!-- spring -->
