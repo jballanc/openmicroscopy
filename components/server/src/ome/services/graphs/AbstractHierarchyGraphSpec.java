@@ -134,32 +134,32 @@ public abstract class AbstractHierarchyGraphSpec extends BaseGraphSpec {
 
         // Now we check if this represents all the hierarchy types
         // in the system.
-        Set<Class<IObject>> types = getTypes(em);
-        if (types.size() != uniquePaths.size()) {
-            throw new FatalBeanException(
-                    "Mismatch between types defined and those found: "
-                            + entries + "<> " + types);
-        }
-
-        TYPE: for (Class<?> type : types) {
-            String simpleName = type.getSimpleName();
-            for (int i = 0; i < entries.size(); i++) {
-                GraphEntry entry = entries.get(i);
-                if (entry.path("").length > 1) {
-                    // This not part of our hierarchy, but some subpath
-                    // ignore it.
-                    continue;
-                }
-                if (simpleName.equals(entry.getName().substring(1))) {
-                    this.types[i] = type;
-                    if (Modifier.isAbstract(type.getModifiers())) {
-                        this.isAbstract[i] = true;
-                    }
-                    continue TYPE;
-                }
-            }
-            throw new FatalBeanException("Could not find entry: " + simpleName);
-        }
+        //Set<Class<IObject>> types = getTypes(em);
+        //if (types.size() != uniquePaths.size()) {
+        //    throw new FatalBeanException(
+        //            "Mismatch between types defined and those found: "
+        //                    + entries + "<> " + types);
+        //}
+        //
+        //TYPE: for (Class<?> type : types) {
+        //    String simpleName = type.getSimpleName();
+        //    for (int i = 0; i < entries.size(); i++) {
+        //        GraphEntry entry = entries.get(i);
+        //        if (entry.path("").length > 1) {
+        //            // This not part of our hierarchy, but some subpath
+        //            // ignore it.
+        //            continue;
+        //        }
+        //        if (simpleName.equals(entry.getName().substring(1))) {
+        //            this.types[i] = type;
+        //            if (Modifier.isAbstract(type.getModifiers())) {
+        //                this.isAbstract[i] = true;
+        //            }
+        //            continue TYPE;
+        //        }
+        //    }
+        //    throw new FatalBeanException("Could not find entry: " + simpleName);
+        //}
     }
 
    /**
