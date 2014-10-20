@@ -20,6 +20,7 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 import pytest
+import os.path
 import omero
 from omero.plugins.download import DownloadControl
 from omero.cli import NonZeroReturnCode
@@ -211,3 +212,51 @@ class TestDownload(CLITest):
         with open(str(tmpfile)) as f:
             bytes2 = f.read()
         assert bytes1 == bytes2
+
+    def testImageDefaultDirectory(self, tmpdir):
+        image = self.importSingleImageWithCompanion()
+        olddir = tmpdir.chdir()
+        try:
+            self.args += ["Image:%s" % image.id.val]
+            self.cli.invoke(self.args, strict=True)
+            files = [tmpdir.bestrelpath(f) for f in tmpdir.listdir()]
+            assert 2 == len(files)
+            for f in files:
+                assert os.path.basename(f) == f
+        finally:
+            olddir.chdir()
+
+    def testImageDownloadDirectory(self, tmpdir):
+        image = self.importSingleImageWithCompanion()
+        olddir = tmpdir.chdir()
+        try:
+            self.args += ["-d", "subdir", "Image:%s" % image.id.val]
+            self.cli.invoke(self.args, strict=True)
+            files = [tmpdir.bestrelpath(f) for f in tmpdir.listdir()]
+            assert ["subdir"] == files
+            subdir = tmpdir.join("subdir")
+            files = [subdir.bestrelpath(f) for f in subdir.listdir()]
+            assert 2 == len(files)
+            for f in files:
+                assert os.path.basename(f) == f
+        finally:
+            olddir.chdir()
+
+    def testImageClientPathDownloadDirectory(self, tmpdir):
+        image = self.importSingleImageWithCompanion()
+        olddir = tmpdir.chdir()
+        try:
+            self.args += ["-c", "1", "-d", "subdir", "Image:%s" % image.id.val]
+            self.cli.invoke(self.args, strict=True)
+            files = [tmpdir.bestrelpath(f) for f in tmpdir.listdir()]
+            assert ["subdir"] == files
+            subdir = tmpdir.join("subdir")
+            files = [subdir.bestrelpath(f) for f in subdir.listdir()]
+            # we don't know what the client path directory is called
+            subdir = subdir.join(files[0])
+            files = [subdir.bestrelpath(f) for f in subdir.listdir()]
+            assert 2 == len(files)
+            for f in files:
+                assert os.path.basename(f) == f
+        finally:
+            olddir.chdir()
