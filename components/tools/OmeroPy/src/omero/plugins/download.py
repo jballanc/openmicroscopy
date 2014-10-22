@@ -68,6 +68,10 @@ class DownloadControl(BaseControl):
             help="Print information as files are downloaded"
         )
         parser.add_argument(
+            "--continue", action="store_true", dest="continue_on_error",
+            help="Continue processing objects after an error"
+        )
+        parser.add_argument(
             "--dryrun", action="store_true",
             help="Don't perform actual downloads"
         )
@@ -91,15 +95,24 @@ class DownloadControl(BaseControl):
             'id': {},
             'name': {},
         }
+        self.continue_on_error = args.continue_on_error
         for obj in objects:
             self.process_file(obj, client, args)
 
+    def failure(self, code, message):
+        if self.continue_on_error:
+            self.ctx.err(message)
+        else:
+            self.ctx.die(code, message)
+
     def process_file(self, obj, client, args):
+        if args.verbose:
+            self.ctx.err('Processing object %s' % obj)
         files = self.get_files(client.sf, obj)
         # if a file name is specified, we can only download a single file
         filename = args.filename or args.fname
         if filename and len(files) > 1:
-            self.ctx.die(603, 'Cannot specify filename if input image has '
+            self.failure(603, 'Cannot specify filename if input image has '
                          'more than 1 associated file, it has %s' % len(files))
         for entry in files:
             # entry is either a filesetentry or an originalfile
@@ -170,11 +183,11 @@ class DownloadControl(BaseControl):
                 client.download(orig_file, target_file)
         except omero.ValidationException, ve:
             # Possible, though unlikely after previous check
-            self.ctx.die(67, "Unknown ValidationException: %s"
+            self.failure(67, "Unknown ValidationException: %s"
                          % ve.message)
         except omero.ResourceError, re:
             # ID exists in DB, but not on FS
-            self.ctx.die(67, "ResourceError: %s" % re.message)
+            self.failure(67, "ResourceError: %s" % re.message)
 
     def get_files(self, session, value):
         # returns a list of OriginalFile or FileSetEntry
@@ -185,9 +198,10 @@ class DownloadControl(BaseControl):
                                   {'omero.group': '-1'})
                 return [ofile]
             except ValueError:
-                self.ctx.die(601, 'Invalid OriginalFile ID input')
+                self.failure(601, 'Invalid OriginalFile ID input')
             except omero.ValidationException:
-                self.ctx.die(601, 'No OriginalFile with input ID')
+                self.failure(601, 'No OriginalFile with input ID')
+            return []
 
         # Assume input is of form OriginalFile:id
         file_id = self.parse_object_id("OriginalFile", value)
@@ -195,18 +209,20 @@ class DownloadControl(BaseControl):
             try:
                 ofile = query.get("OriginalFile", file_id,
                                   {'omero.group': '-1'})
+                return [ofile]
             except omero.ValidationException:
-                self.ctx.die(601, 'No OriginalFile with input ID')
-            return [ofile]
+                self.failure(601, 'No OriginalFile with input ID')
+            return []
 
         # Assume input is of form FileAnnotation:id
         fa_id = self.parse_object_id("FileAnnotation", value)
         if fa_id:
             try:
                 fa = query.get("FileAnnotation", fa_id, {'omero.group': '-1'})
+                return [fa.getFile()]
             except omero.ValidationException:
-                self.ctx.die(601, 'No FileAnnotation with input ID')
-            return [fa.getFile()]
+                self.failure(601, 'No FileAnnotation with input ID')
+            return []
 
         # Assume input is of form Image:id
         image_id = self.parse_object_id("Image", value)
@@ -219,11 +235,13 @@ class DownloadControl(BaseControl):
                 " join fetch uf.originalFile as f" \
                 " where i.id = :iid"
             query_out = query.projection(sql, params, {'omero.group': '-1'})
-            if not query_out:
-                self.ctx.die(602, 'Input image has no associated Fileset')
-            return [unwrap(fsentry)[0] for fsentry in query_out]
+            if query_out:
+                return [unwrap(fsentry)[0] for fsentry in query_out]
+            self.failure(602, 'Input image has no associated Fileset')
+            return []
 
-        self.ctx.die(601, 'Invalid object input')
+        self.failure(601, 'Invalid object input')
+        return []
 
     def parse_object_id(self, object_type, value):
 
