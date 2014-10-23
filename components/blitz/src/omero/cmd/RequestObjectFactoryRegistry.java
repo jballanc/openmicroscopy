@@ -35,6 +35,7 @@ import omero.cmd.fs.OriginalMetadataRequestI;
 import omero.cmd.graphs.ChgrpI;
 import omero.cmd.graphs.Chgrp2I;
 import omero.cmd.graphs.ChgrpFacadeI;
+import omero.cmd.graphs.ChildOptionI;
 import omero.cmd.graphs.ChmodI;
 import omero.cmd.graphs.ChownI;
 import omero.cmd.graphs.DeleteI;
@@ -203,6 +204,14 @@ public class RequestObjectFactoryRegistry extends
                     @Override
                     public Ice.Object create(String name) {
                         return new ManageImageBinariesI(pixelsService, voter);
+                    }
+                });
+        /* non-requests */
+        factories.put(ChildOptionI.ice_staticId(),
+                new ObjectFactory(ChildOptionI.ice_staticId()) {
+                    @Override
+                    public Ice.Object create(String name) {
+                        return graphRequestFactory.createChildOption();
                     }
                 });
         return factories;
