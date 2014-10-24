@@ -44,6 +44,8 @@ import omero.model.DimensionOrder;
 import omero.model.Experiment;
 import omero.model.ExperimentI;
 import omero.model.ExperimentType;
+import omero.model.Fileset;
+import omero.model.FilesetI;
 import omero.model.Filament;
 import omero.model.FilamentI;
 import omero.model.FilamentType;
@@ -278,6 +280,15 @@ public class ModelMockFactory {
         img.setDescription(rstring(uniqueDesc));
         img.setAcquisitionDate(rtime(time));
         return img;
+    }
+
+    /**
+     * @return a default fileset
+     */
+    public Fileset simpleFileset() {
+        Fileset fs = new FilesetI();
+        fs.setTemplatePrefix(omero.rtypes.rstring("fileset-" + System.nanoTime() + "/"));
+        return fs;
     }
 
     /**
