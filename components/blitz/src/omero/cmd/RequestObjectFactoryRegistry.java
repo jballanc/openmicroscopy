@@ -206,7 +206,7 @@ public class RequestObjectFactoryRegistry extends
                         return new ManageImageBinariesI(pixelsService, voter);
                     }
                 });
-        /* non-requests */
+        /* request parameters */
         factories.put(ChildOptionI.ice_staticId(),
                 new ObjectFactory(ChildOptionI.ice_staticId()) {
                     @Override
