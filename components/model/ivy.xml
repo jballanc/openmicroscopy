@@ -36,6 +36,7 @@
         <exclude org="org.slf4j"/>
         <exclude org="com.github.dblock.waffle"/>
     </dependency>
+    <dependency org="org.hibernate" name="hibernate-commons-annotations" rev="${versions.hibernate-annotations}" conf="build,server->default"/>
     <dependency org="org.hibernate" name="hibernate-core" rev="${versions.hibernate}" conf="build,server->default"/>
     <dependency org="org.hibernate" name="hibernate-search" rev="${versions.hibernate-search}" conf="build,server->default"/>
     <dependency org="org.hibernate" name="hibernate-validator" rev="${versions.hibernate-validator}" conf="build,server->default"/>
