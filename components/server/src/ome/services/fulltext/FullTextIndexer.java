@@ -189,7 +189,7 @@ public class FullTextIndexer extends SimpleWork implements ApplicationContextAwa
      * Runs {@link #doIndexing(FullTextSession)} within a Lucene transaction.
      * {@link #doIndexing(FullTextSession)} will also be called
      */
-    @Transactional(readOnly = false, isolation = Isolation.SERIALIZABLE)
+    @Transactional(readOnly = false, isolation = Isolation.READ_COMMITTED)
     public Object doWork(Session session, ServiceFactory sf) {
         int count = 1;
         int perbatch = 0;

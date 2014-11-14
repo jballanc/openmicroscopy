@@ -92,6 +92,18 @@ public class UpdateFilter extends ContextFilter {
                 || o instanceof Permissions || o instanceof byte[]
                 || o instanceof String[] || o instanceof String[][]) {
             result = o;
+
+            // WORKAROUND for perkinelmer ticket#6 NaN support in Oracle.
+            if (o instanceof Double) {
+                if (((Double) o).isNaN()) {
+                    result = null;
+                }
+            } else if (o instanceof Float) {
+                if (((Float) o).isNaN()) {
+                    result = null;
+                }
+            }
+
         } else {
             throw new RuntimeException(
                     "Update Filter cannot allow unknown types to be saved."

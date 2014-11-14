@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:util="http://www.springframework.org/schema/util"
+         xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+           http://www.springframework.org/schema/util
+           http://www.springframework.org/schema/util/spring-util-2.0.xsd"
+       default-lazy-init="true">
+<!--
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# $Id$
+#
+# Copyright 2010 Glencoe Software, Inc. All rights reserved.
+# Use is subject to license terms supplied in LICENSE.txt
+#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-->
+
+<!--
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Written by:  Josh Moore, josh at glencoesoftware.com
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-->
+
+  <description>
+    Primarily an extension of ome/services/datalayer.xml for use with Oracle
+    Databases.
+  </description>
+
+  <bean id="oracle10gDataSourceProperties" class="org.springframework.beans.factory.config.PropertiesFactoryBean">
+    <property name="properties">
+      <props>
+        <prop key="driverClassName">${omero.db.driver}</prop>
+        <prop key="url">jdbc:oracle:${omero.db.driver_type}:@${omero.db.host}:${omero.db.port}/${omero.db.name}</prop>
+        <prop key="user">${omero.db.user}</prop>
+        <prop key="password">${omero.db.pass}</prop>
+      </props>
+    </property>
+  </bean>
+
+  <bean id="org.springframework.jdbc.support.lob.OracleLobHandler" class="org.springframework.jdbc.support.lob.OracleLobHandler">
+    <description>Must be defined to make some DBs work correctly.</description>
+    <property name="nativeJdbcExtractor">
+        <bean class="org.springframework.jdbc.support.nativejdbc.SimpleNativeJdbcExtractor"/>
+    </property>
+  </bean>
+
+</beans>

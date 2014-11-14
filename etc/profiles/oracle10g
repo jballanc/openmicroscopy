@@ -1,0 +1,16 @@
+#
+# oracle 10g profile
+#
+omero.db.port=1521
+omero.db.driver=oracle.jdbc.OracleDriver
+omero.db.driver_type=thin
+omero.db.dialect=ome.dialects.Oracle10gDialect
+omero.db.sql_action_class=ome.util.actions.Oracle10gSqlAction
+omero.db.lob_handler=org.springframework.jdbc.support.lob.OracleLobHandler
+omero.db.jar=ojdbc6_g
+omero.db.jar_version=11.2.0.4
+omero.db.delimiter=;
+omero.db.defer=deferrable initially deferred
+omero.db.temp_ids_limit=500
+
+omero.security.filter.bitand=(bitand(permissions,%s) = %s)
