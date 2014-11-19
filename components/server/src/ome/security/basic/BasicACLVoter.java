@@ -284,9 +284,9 @@ public class BasicACLVoter implements ACLVoter {
         int rv = 0;
 
         final boolean sysType = sysTypes.isSystemType(iObject.getClass()) ||
-            sysTypes.isInSystemGroup(iObject.getDetails());
+            sysTypes.isInSystemGroup(trustedDetails);
         final boolean sysTypeOrUsrGroup = sysType ||
-            sysTypes.isInUserGroup(iObject.getDetails());
+            sysTypes.isInUserGroup(trustedDetails);
 
         // needs no details info
         if (tokenHolder.hasPrivilegedToken(iObject)) {
