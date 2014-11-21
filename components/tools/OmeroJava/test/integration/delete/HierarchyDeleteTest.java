@@ -83,7 +83,6 @@ public class HierarchyDeleteTest extends AbstractServerTest {
      * @throws Exception
      *             Thrown if an error occurred.
      */
-    @Test(groups = {"ticket:3031", "broken"})
     public void testDeletingDataset() throws Exception {
 
         newUserAndGroup("rwrw--");
@@ -129,7 +128,6 @@ public class HierarchyDeleteTest extends AbstractServerTest {
      * @throws Exception
      *             Thrown if an error occurred.
      */
-    @Test(groups = {"ticket:3031", "broken"})
     public void testDeletingDatasetDoesntRemoveImageAnnotation()
             throws Exception {
 
@@ -173,7 +171,6 @@ public class HierarchyDeleteTest extends AbstractServerTest {
      * @throws Exception
      *             Thrown if an error occurred.
      */
-    @Test(groups = {"ticket:3031", "ticket:3032", "broken"})
     public void testDeletingDatasetDoesntRemoveImageRoi() throws Exception {
 
         newUserAndGroup("rwrw--");
