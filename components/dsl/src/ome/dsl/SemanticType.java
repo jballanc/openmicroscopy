@@ -305,7 +305,7 @@ public abstract class SemanticType {
         if (isRestrictive() && RESTRICTED_TABLE.contains(tableName)) {
             tableName = tableName + "_";
         }
-        return reduce(tableName);
+        return reduce(replace( tableName ));
     }
 
     public String inverse(Property p) {
