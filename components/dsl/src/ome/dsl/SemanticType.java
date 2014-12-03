@@ -277,10 +277,14 @@ public abstract class SemanticType {
      * databases with relation name length restrictions.
      */
     public String indexName(Property p) {
+        return indexName(p.getName());
+    }
+
+    public String indexName(String propName) {
         String indexName = String.format(
                 "i_%s_%s",
                 getShortname(),
-                p.getName());
+                propName);
         return reduce(replace(indexName));
     }
 
