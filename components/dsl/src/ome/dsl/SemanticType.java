@@ -20,6 +20,9 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Pattern;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 // Third-party libraries
 
 // Application-internal dependencies
@@ -34,6 +37,8 @@ import java.util.regex.Pattern;
  * @since OMERO-3.0
  */
 public abstract class SemanticType {
+
+    private static Log log = LogFactory.getLog(SemanticType.class);
 
     // Patterns for reducing name lengths
     final static private Pattern annPattern = Pattern.compile("annotation");
@@ -121,6 +126,8 @@ public abstract class SemanticType {
     private Boolean named;
 
     private final Set<String> uniqueConstraints = new HashSet<String>();
+
+    private final Map<String, String> reducedNames = new HashMap<String, String>();
 
     /**
      * sets the the various properties available in attrs USING DEFAULTS IF NOT
@@ -372,7 +379,26 @@ public abstract class SemanticType {
             if (name.length() > 30) {
                 String keep = name.substring(0, 27);
                 String reduce = name.substring(28);
-                name = keep + reduce.length();
+                int reduceCnt = reduce.length();
+                String reduced = keep + reduceCnt;
+                String prevReduced = reducedNames.get(reduced);
+
+                // Avoid using the same reduced name for two different
+                // identifier in the same template. Note that there is no
+                // guarantee that reduced names will remain consistent between
+                // templates, as this workaround depends on the order in which
+                // the names are encountered.
+                boolean reducedCollision = false;
+                while (prevReduced != null && !name.equals(prevReduced)) {
+                    reduced = keep + ++reduceCnt;
+                    prevReduced = reducedNames.get(reduced);
+                    reducedCollision = true;
+                }
+                if (reducedCollision) {
+                    log.warn("Name collision while reducing " + name + ".");
+                }
+                reducedNames.put(reduced, name);
+                name = reduced;
             }
         }
         return name;
