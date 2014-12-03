@@ -37,9 +37,12 @@ public abstract class SemanticType {
 
     // Patterns for reducing name lengths
     final static private Pattern annPattern = Pattern.compile("annotation");
+    final static private Pattern AnnPattern = Pattern.compile("Annotation");
     final static private Pattern cntPattern = Pattern.compile("FK_count_to");
     final static private Pattern grpPattern = Pattern.compile("experimentergroup");
+    final static private Pattern GrpPattern = Pattern.compile("ExperimenterGroup");
     final static private Pattern acqPattern = Pattern.compile("screenacquisition");
+    final static private Pattern AcqPattern = Pattern.compile("ScreenAcquisition");
 
     final static private String VM_QUOTE = "\\\"";
 
@@ -353,9 +356,12 @@ public abstract class SemanticType {
 
         if (isRestrictive()) {
             name = annPattern.matcher(name).replaceAll("ann");
+            name = AnnPattern.matcher(name).replaceAll("Ann");
             name = cntPattern.matcher(name).replaceAll("FK_cnt_");
             name = grpPattern.matcher(name).replaceAll("group");
+            name = GrpPattern.matcher(name).replaceAll("Group");
             name = acqPattern.matcher(name).replaceAll("scr_acq");
+            name = AcqPattern.matcher(name).replaceAll("ScrAcq");
         }
         return name;
     }
