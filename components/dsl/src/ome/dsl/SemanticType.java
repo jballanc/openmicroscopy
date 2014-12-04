@@ -269,7 +269,7 @@ public abstract class SemanticType {
                 "count_%s_%s_by_owner",
                 getShortname(),
                 p.getName());
-        return reduce(replace(countName));
+        return reduce(countName);
     }
 
     /**
@@ -309,7 +309,7 @@ public abstract class SemanticType {
         if (isRestrictive() && RESTRICTED_TABLE.contains(tableName)) {
             tableName = tableName + "_";
         }
-        return reduce(replace( tableName ));
+        return reduce(tableName);
     }
 
     public String inverse(Property p) {
