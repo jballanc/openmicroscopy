@@ -312,6 +312,30 @@ public abstract class SemanticType {
         return reduce(tableName);
     }
 
+    /*
+     * Get the name of the annotation link table for this type, if one exists.
+     * This is necessary because some annotation link table names violate length
+     * constraints in RESTRICTED databases.
+     */
+    public String annLinkTableName() {
+        String tableName = tableName();
+        if (tableName.endsWith("_")) {
+            // Restricted table names aren't restricted when we add to the end
+            // of the table name.
+            tableName = tableName.substring(0, tableName.length() - 1);
+        }
+        return reduce(tableName + "annotationlink");
+    }
+
+    /*
+     * Generate a name for the annotation link event trigger for this type. In
+     * RESTRICTED databases, this will almost always violate length constraints,
+     * so the trigger name is placed first and greatly abbreviated
+     */
+    public String annLinkEventTriggerName() {
+        return reduce(replace("linkEvt_" + tableName()));
+    }
+
     public String inverse(Property p) {
         String inverse = p.getInverse();
         if (RESTRICTED_COLUMNS.contains(inverse)) {
