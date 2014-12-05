@@ -31,6 +31,7 @@ import java.util.Set;
 import ome.io.bioformats.BfPyramidPixelBuffer;
 import ome.io.nio.AbstractFileSystemService;
 import ome.io.nio.PixelsService;
+import ome.services.delete.files.FileDeleter;
 import ome.services.graphs.GraphException;
 import ome.services.graphs.GraphSpec;
 import ome.services.graphs.GraphState;
@@ -120,9 +121,6 @@ public class Deletion {
 
     private static final Logger log = LoggerFactory.getLogger(Deletion.class);
 
-    private static final List<String> fileTypeList = Collections.unmodifiableList(
-            Arrays.asList( "OriginalFile", "Pixels", "Thumbnail"));
-
     //
     // Ctor/injection state
     //
@@ -169,13 +167,9 @@ public class Deletion {
 
     private long stop;
 
-    private long bytesFailed = 0;
-
-    private long filesFailed = 0;
-
     private long actualDeletes = 0;
 
-    private HashMap<String, long[]> undeletedFiles;
+    private FileDeleter files;
 
     public Deletion(ApplicationContext specs, DeleteStepFactory factory,
             AbstractFileSystemService afs, OmeroContext ctx) {
@@ -220,7 +214,7 @@ public class Deletion {
     }
 
     public Map<String, long[]> getUndeletedFiles() {
-        return undeletedFiles;
+        return files == null ? null : files.getUndeletedFiles();
     }
 
     //
@@ -285,6 +279,7 @@ public class Deletion {
                 + ") Delete a subgraph first.");
         }
 
+        this.files = new FileDeleter(ctx, afs, state, type, id);
         return (int) scheduledDeletes;
 
     }
