@@ -813,6 +813,7 @@ class TestOriginalMetadata(AbstractRepoTest):
         finally:
             handle.close()
 
+
 class TestDeletePerformance(AbstractRepoTest):
 
     def testImport(self):
@@ -821,7 +822,7 @@ class TestDeletePerformance(AbstractRepoTest):
         client = self.new_client()
         mrepo = self.getManagedRepo(client)
         folder = create_path(folder=True)
-        for x in range(100):
+        for x in range(200):
             name = "%s.unknown" % x
             (folder / name).touch()
         paths = folder.files()
@@ -831,7 +832,7 @@ class TestDeletePerformance(AbstractRepoTest):
         req = handle.getRequest()
         fs = req.activity.getParent()
         cb = CmdCallbackI(client, handle)
-        self.assertError(cb)
+        self.assertError(cb, loops=200)
 
         delete = omero.cmd.Delete()
         delete.type = "/Fileset"
@@ -839,6 +840,6 @@ class TestDeletePerformance(AbstractRepoTest):
         s2 = time.time()
         print s2 - s1,
         t1 = time.time()
-        cb2 = client.submit(delete, loops=200)
+        client.submit(delete, loops=200)
         t2 = time.time()
         print " ", t2-t1,
