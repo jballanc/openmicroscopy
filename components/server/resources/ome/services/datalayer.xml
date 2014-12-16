@@ -164,7 +164,6 @@
     <property name="maxPoolSize" value="${omero.db.poolsize}"/>
     <!-- NPE ?? property name="loginTimeout" value="5" -->
     <property name="allowLocalTransactions" value="true"/>
-    <property name="testQuery" value="select 1"/>
     <property name="driverProperties" ref="dataSourceProperties"/>
     <property name="preparedStatementCacheSize" value="${omero.db.prepared_statement_cache_size}"/>
   </bean>
