@@ -68,12 +68,12 @@ public class Oracle10gSqlAction extends SqlAction.Impl {
 
     public void prepareSession(final long eventId, final long userId, final long groupId) {
         JdbcTemplate jt = (JdbcTemplate) _jdbc().getJdbcOperations();
-        SimpleJdbcCall call = new SimpleJdbcCall(jt).withFunctionName("prepare_session");
+        SimpleJdbcCall call = new SimpleJdbcCall(jt).withProcedureName("prepare_session");
         MapSqlParameterSource in = new MapSqlParameterSource();
-        in.addValue("_event_id", eventId);
-        in.addValue("_user_id", userId);
-        in.addValue("_group_id", groupId);
-        call.executeFunction(void.class, in);
+        in.addValue("event_id", eventId);
+        in.addValue("user_id", userId);
+        in.addValue("group_id", groupId);
+        call.execute(in);
     }
 
     public boolean activeSession(String sessionUUID) {

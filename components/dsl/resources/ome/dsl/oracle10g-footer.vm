@@ -158,17 +158,17 @@ END ome_nextval;
 --
 
 CREATE GLOBAL TEMPORARY TABLE current_session (event_id NUMBER(19),
-                                                user_id  NUMBER(19),
-                                                group_id NUMBER(19))
+                                               user_id  NUMBER(19),
+                                               group_id NUMBER(19))
     ON COMMIT DELETE ROWS;
 
-CREATE OR REPLACE PROCEDURE prepare_session(event_id_in IN NUMBER,
-                                           user_id_in  IN NUMBER,
-                                           group_id_in IN NUMBER)
+CREATE OR REPLACE PROCEDURE prepare_session(event_id IN NUMBER,
+                                            user_id  IN NUMBER,
+                                            group_id IN NUMBER)
 IS
 BEGIN
     DELETE FROM current_session;
-    INSERT INTO current_session VALUES (event_id_in, user_id_in, group_id_in);
+    INSERT INTO current_session VALUES (event_id, user_id, group_id);
 END prepare_session;
 /
 
