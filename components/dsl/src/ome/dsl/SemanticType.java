@@ -328,12 +328,16 @@ public abstract class SemanticType {
     }
 
     /*
-     * Generate a name for the annotation link event trigger for this type. In
-     * RESTRICTED databases, this will almost always violate length constraints,
-     * so the trigger name is placed first and greatly abbreviated
+     * Generate a name for the annotation link event/delete trigger for this
+     * type. In RESTRICTED databases, this will almost always violate length
+     * constraints, so the trigger name is placed first and greatly abbreviated
      */
     public String annLinkEventTriggerName() {
         return reduce(replace("linkEvt_" + tableName()));
+    }
+
+    public String annLinkDeleteTriggerName() {
+        return reduce(replace("linkDel_" + tableName()));
     }
 
     public String inverse(Property p) {

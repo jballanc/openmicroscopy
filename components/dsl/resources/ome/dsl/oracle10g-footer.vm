@@ -253,10 +253,24 @@ BEGIN
         VALUES (nextval, 'REINDEX', -52, :NEW.parent, '${type.id}', eid);
 END ${type.annLinkEventTriggerName()};
 /
+
+-- Delete triggers to go with update triggers (See #9337)
+CREATE OR REPLACE TRIGGER ${type.annLinkDeleteTriggerName()}
+BEFORE DELETE ON ${type.annLinkTableName()}
+FOR EACH ROW
+DECLARE
+  eid NUMBER;
+  nextval NUMBER;
+BEGIN
+  eid := current_or_new_event();
+  nextval := ome_nextval('seq_eventlog');
+  INSERT INTO eventlog (id, action, permissions, entityid, entitytype, event)
+    VALUES (nextval, 'REINDEX', -52, :OLD.parent, '${type.id}', eid);
+END ${type.annLinkDeleteTriggerName()};
+/
+
 #end
 #end
-
-
 --
 -- END #1390
 --
