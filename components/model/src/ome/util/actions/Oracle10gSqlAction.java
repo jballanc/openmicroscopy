@@ -399,7 +399,7 @@ public class Oracle10gSqlAction extends SqlAction.Impl {
             public Object doInConnection(java.sql.Connection connection)
                     throws SQLException {
                 Statement statement = connection.createStatement();
-                statement.execute("set constraints all deferred;");
+                statement.execute("set constraints all deferred");
                 return null;
             }
         });
