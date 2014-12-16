@@ -199,7 +199,7 @@ BEGIN
         eid := ome_nextval('seq_event');
         INSERT INTO event (id, permissions, status, time, experimenter,
                            experimentergroup, "session", type)
-            VALUES (eid, -35, 'TRIGGERED', SYSDATE, 0, 0, 0, 0);
+            VALUES (eid, -52, 'TRIGGERED', SYSDATE, 0, 0, 0, 0);
     END IF;
     RETURN eid;
 END current_or_new_event;
@@ -232,7 +232,7 @@ BEGIN
     THEN
         eid := current_or_new_event();
         INSERT INTO eventlog (id, action, permissions, entityid, entitytype, event)
-            SELECT ome_nextval('seq_eventlog'), 'REINDEX', -35, entityid, entitytype, eid
+            SELECT ome_nextval('seq_eventlog'), 'REINDEX', -52, entityid, entitytype, eid
             FROM updated_annotations;
     END IF;
 END annotation_trigger;
@@ -250,7 +250,7 @@ BEGIN
     eid := current_or_new_event();
     nextval := ome_nextval('seq_eventlog');
     INSERT INTO eventlog (id, action, permissions, entityid, entitytype, event)
-        VALUES (nextval, 'REINDEX', -35, :NEW.parent, '${type.id}', eid);
+        VALUES (nextval, 'REINDEX', -52, :NEW.parent, '${type.id}', eid);
 END ${type.annLinkEventTriggerName()};
 /
 #end
@@ -274,7 +274,7 @@ alter table dbpatch add constraint unique_dbpatch unique (currentVersion, curren
 -- Since this is a table that we will be using in DB-specific ways, we're also going
 -- to make working with it a bit simpler.
 --
-alter table dbpatch modify permissions default -35;
+alter table dbpatch modify permissions default -52;
 alter table dbpatch modify message default 'Updating';
 -- Following Trigger is doing what "DEFAULT ome_nextval('seq_dbpatch');" is doing in PostGres.
 CREATE OR REPLACE TRIGGER dbpatch_autonumber
@@ -305,13 +305,13 @@ insert into experimenter (id,permissions,version,omename,firstname,lastname)
         select ome_nextval('seq_experimenter'),0,0,'guest','Guest','Account' from dual;
 insert into node
         (id,permissions,uuid,conn,up,down)
-        select 0,-35,'000000000000000000000000000000000000','unknown',SYSDATE,SYSDATE FROM dual;
+        select 0,-52,'000000000000000000000000000000000000','unkclock_timestampn',SYSDATE,SYSDATE FROM dual;
 insert into session_
         (id,permissions,timetoidle,timetolive,started,closed,defaulteventtype,uuid,owner,node)
-        select 0,-35,0,0,SYSDATE,SYSDATE,'BOOTSTRAP',0000,0,0 FROM dual;
+        select 0,-52,0,0,SYSDATE,SYSDATE,'BOOTSTRAP',0000,0,0 FROM dual;
 insert into session_
         (id,permissions,timetoidle,timetolive,started,closed,defaulteventtype,uuid,owner,node)
-        select ome_nextval('seq_session'),-35,0,0,SYSDATE,SYSDATE,'PREVIOUSITEMS','1111',0,0 FROM dual;
+        select ome_nextval('seq_session'),-52,0,0,SYSDATE,SYSDATE,'PREVIOUSITEMS','1111',0,0 FROM dual;
 insert into event (id,permissions,time,status,experimenter,"session") values (0,0,SYSDATE,'BOOTSTRAP',0,0);
 
 --
@@ -322,24 +322,24 @@ insert into event (id,permissions,time,status,experimenter,"session") values (0,
 --    though nothing should be created there.
 --
 insert into experimentergroup (id,permissions,version,name)
-        values (0,-103,0,'system');
+        values (0,-120,0,'system');
 insert into experimentergroup (id,permissions,version,name)
-        select ome_nextval('seq_experimentergroup'),-35,0,'user' from dual;
+        select ome_nextval('seq_experimentergroup'),-52,0,'user' from dual;
 insert into experimentergroup (id,permissions,version,name)
-        select ome_nextval('seq_experimentergroup'),-103,0,'guest' from dual;
+        select ome_nextval('seq_experimentergroup'),-120,0,'guest' from dual;
 
 insert into eventtype (id,permissions,value) values
-        (0,-35,'Bootstrap');
+        (0,-52,'Bootstrap');
 insert into groupexperimentermap
         (id,permissions,version, parent, child, child_index,owner)
         values
-        (0,-35,0,0,0,0,1);
+        (0,-52,0,0,0,0,1);
 insert into groupexperimentermap
         (id,permissions,version, parent, child, child_index,owner)
-        select ome_nextval('seq_groupexperimentermap'),-35,0,1,0,1,0 from dual;
+        select ome_nextval('seq_groupexperimentermap'),-52,0,1,0,1,0 from dual;
 insert into groupexperimentermap
         (id,permissions,version, parent, child, child_index,owner)
-        select ome_nextval('seq_groupexperimentermap'),-35,0,2,1,0,0 from dual;
+        select ome_nextval('seq_groupexperimentermap'),-52,0,2,1,0,0 from dual;
 
 update event set type = 0;
 update event set experimentergroup = 0;
@@ -354,7 +354,7 @@ alter table event modify experimentergroup number(20) not null;
 #set($table = ${enum.typeToColumn($enum.id)} )
 #if($prop.class.name == "ome.dsl.EntryField")
 insert into $table (id,permissions,value)
-    select ome_nextval('seq_$table'),-35,'$prop.name' from dual;
+    select ome_nextval('seq_$table'),-52,'$prop.name' from dual;
 #end
 #end
 #end
