@@ -11,6 +11,7 @@ omero.db.lob_handler=org.springframework.jdbc.support.lob.OracleLobHandler
 omero.db.jar=ojdbc6_g
 omero.db.jar_version=11.2.0.4
 omero.db.delimiter=;
+omero.db.test_query=select 1 from dual
 omero.db.defer=deferrable initially deferred
 omero.db.temp_ids_limit=500
 
