@@ -97,6 +97,29 @@ hibernate.dialect=${omero.db.generate_dialect}
                         <!-- Extra space before ';' prevents multiple replacements -->
 			<fileset dir="${resrc.dest}" includes="ddl.sql"/>
 		</replaceregexp>
+                <if>
+                  <equals arg1="${omero.db.profile}" arg2="oracle10g"/>
+                  <then>
+                    <replaceregexp
+                      match="text\[\]\[\]"
+                      replace="STRING_ARRAY_ARRAY"
+                      flags="gs" byline="false">
+                      <fileset dir="${resrc.dest}" includes="ddl.sql"/>
+                    </replaceregexp>
+                    <replaceregexp
+                      match="text\[\]"
+                      replace="STRING_ARRAY"
+                      flags="gs" byline="false">
+                      <fileset dir="${resrc.dest}" includes="ddl.sql"/>
+                    </replaceregexp>
+                    <replaceregexp
+                      match="bytea"
+                      replace="RAW(255)"
+                      flags="gs" byline="false">
+                      <fileset dir="${resrc.dest}" includes="ddl.sql"/>
+                    </replaceregexp>
+                  </then>
+                </if>
 		<taskdef name="schemavalidator" classname="org.hibernate.tool.hbm2ddl.SchemaValidatorTask" classpathref="omero.classpath"/>
 		<!-- Disabled -->
 		<!--schemavalidator properties="${resrc.dest}/local.properties" config="${basedir}/test/test.cfg.xml"/-->
