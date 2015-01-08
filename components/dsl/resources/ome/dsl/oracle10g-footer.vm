@@ -1,5 +1,5 @@
 --
--- Copyright 2011 Glencoe Software, Inc. All rights reserved.
+-- Copyright 2011-2015 Glencoe Software, Inc. All rights reserved.
 -- Use is subject to license terms supplied in LICENSE.txt
 --
 
@@ -241,7 +241,7 @@ END annotation_trigger;
 #foreach($type in $types)
 #if(${type.annotated} && !${type.superclass})
 CREATE OR REPLACE TRIGGER ${type.annLinkEventTriggerName()}
-AFTER UPDATE ON ${type.annLinkTableName()}
+AFTER INSERT OR UPDATE ON ${type.annLinkTableName()}
 FOR EACH ROW
 DECLARE
     eid NUMBER;
@@ -311,6 +311,12 @@ insert into dbpatch (currentVersion, currentPatch, previousVersion, previousPatc
              values ('@DBVERSION@',  @DBPATCH@,    '@DBVERSION@',   0,             'Initializing');
 
 --
+-- Temporarily make event columns nullable; restored below.
+--
+alter table event modify (type null);
+alter table event modify (experimentergroup null);
+
+--
 -- Here we will create the root account and the necessary groups
 --
 insert into experimenter (id,permissions,version,omename,firstname,lastname)
@@ -358,8 +364,8 @@ insert into groupexperimentermap
 update event set type = 0;
 update event set experimentergroup = 0;
 
-alter table event modify type number(20) not null;
-alter table event modify experimentergroup number(20) not null;
+alter table event modify (type not null);
+alter table event modify (experimentergroup not null);
 
 
 ## ENUMS
@@ -462,6 +468,140 @@ insert into password (experimenter_id, hash) values (0,'@ROOTPASS@');
 insert into password (experimenter_id, hash) values (1,'');
 -- root can now login with omero.rootpass property value
 -- and guest can login with any value
+
+--
+-- FS Resources
+--
+
+-- Prevent the deletion of mimetype = "Directory" objects
+CREATE OR REPLACE TRIGGER fs_dir_delete
+BEFORE DELETE ON originalfile
+FOR EACH ROW
+DECLARE
+  chldChk NUMBER;
+BEGIN
+  IF :OLD.repo is NOT NULL THEN
+    IF :OLD.mimetype = 'Directory' THEN
+      --
+      -- If any children are found, prevent deletion
+      --
+      SELECT count(*) INTO chldChk FROM originalfile
+        WHERE path = :OLD.path || :OLD.name || '/';
+      IF NVL(chldChk,0) <> 0
+        -- CANCEL DELETE
+        RAISE_APPLICATION_ERROR(-20000, 'Directory('||:OLD.id||')='||:OLD.path||:OLD.name||'/ is not empty!');
+      END IF;
+    END IF;
+  END IF;
+  return :OLD; -- proceed
+END fs_dir_delete;
+/
+
+-- Prevent Directory entries in the originalfile table from having their mimetype changed.
+CREATE OR REPLACE TRIGGER fs_dir_mimetype
+BEFORE UPDATE ON originalfile
+FOR EACH ROW
+BEGIN
+  IF :OLD.mimetype = 'Directory' AND :NEW.mimetype != 'Directory' THEN
+    RAISE_APPLICATION_ERROR(-20001, 'Directory('||:OLD.id||')='||:OLD.path||:OLD.name||'/ must remain a Directory');
+  END IF;
+  RETURN :NEW;
+END fs_dir_mimetype;
+/
+
+-- Prevent SQL DELETE from removing the root experimenter from the system or user group.
+CREATE OR REPLACE TRIGGER prevent_root_delete
+BEFORE DELETE ON groupexperimentermap
+FOR EACH ROW
+BEGIN
+  IF :OLD.child = 0 THEN
+    IF :OLD.parent = 0 THEN
+      RAISE_APPLICATION_ERROR(-20002, 'cannot remove system group membership for root');
+    ELSIF :OLD.parent = 1 THEN
+      RAISE_APPLICATION_ERROR(-20003, 'cannot remove user group membership for root');
+    END IF;
+  END IF;
+  RETURN :OLD;
+END prevent_root_delete;
+/
+
+-- Prevent SQL UPDATE from removing the root experimenter from the system or user group.
+CREATE OR REPLACE TRIGGER prevent_root_update
+BEFORE UPDATE ON groupexperimentermap
+FOR EACH ROW
+BEGIN
+  IF :OLD.child != :NEW.child OR :OLD.parent != :NEW.parent THEN
+    IF :OLD.child = 0 THEN
+      IF :OLD.parent = 0 THEN
+        RAISE_APPLICATION_ERROR(-20002, 'cannot remove system group membership for root');
+      ELSIF :OLD.parent = 1 THEN
+        RAISE_APPLICATION_ERROR(-20003, 'cannot remove user group membership for root');
+      END IF;
+    END IF;
+  END IF;
+  RETURN :NEW;
+END prevent_root_update;
+/
+
+-- Prevent the root and guest experimenters from being renamed.
+CREATE OR REPLACE TRIGGER prvnt_exptr_rename
+BEFORE UPDATE ON experimenter
+FOR EACH ROW
+BEGIN
+  IF :OLD.omename != :NEW.omename THEN
+    IF :OLD.id = 0 THEN
+      RAISE_APPLICATION_ERROR(-20004, 'cannot rename root experimenter');
+    ELSIF :OLD.id = 1 THEN
+      RAISE_APPLICATION_ERROR(-20005, 'cannot rename guest experimenter');
+    END IF;
+  END IF;
+END prvnt_exptr_rename;
+/
+
+-- Prevent the system, user and guest groups from being renamed.
+CREATE OR REPLACE TRIGGER prvnt_group_rename
+BEFORE UPDATE ON experimentergroup
+FOR EACH ROW
+BEGIN
+  IF :OLD.name != :NEW.name THEN
+    IF :OLD.id = 0 THEN
+      RAISE_APPLICATION_ERROR(-20006, 'cannot rename system experimenter group');
+    ELSIF :OLD.id = 1 THEN
+      RAISE_APPLICATION_ERROR(-20007, 'cannot rename user experimenter group');
+    ELSIF :OLD.id = 2 THEN
+      RAISE_APPLICATION_ERROR(-20008, 'cannot rename guest experimenter group');
+    END IF;
+  END IF;
+  RETURN :NEW;
+END prvnt_group_rename;
+/
+
+CREATE TABLE fs_deletelog (
+    event_id NUMBER(19) NOT NULL,
+    file_id NUMBER(19) NOT NULL,
+    owner_id NUMBER(19) NOT NULL,
+    group_id NUMBER(19) NOT NULL,
+    path VARCHAR2(255 CHAR) NOT NULL,
+    name VARCHAR2(255 CHAR) NOT NULL,
+    repo VARCHAR2(36 CHAR) NOT NULL,
+    params PARAMS_MAP);
+
+CREATE OR REPLACE TRIGGER fs_log_delete
+AFTER DELETE ON originalfile
+FOR EACH ROW
+DECLARE
+  eid NUMBER;
+BEGIN
+  IF :OLD.repo is NOT NULL THEN
+    eid := current_or_new_event();
+    INSERT INTO fs_deletelog (event_id, file_id, owner_id,
+                              group_id, path, name, repo, params)
+      VALUES (eid, :OLD.id, :OLD.owner_id,
+              :OLD.group_id, :OLD.path, :OLD.name, :OLD.repo, :OLD.params);
+  END IF;
+END fs_log_delete;
+/
+
 
 -- Here we have finished initializing this database.
 update dbpatch set message = 'Database ready.', finished = SYSDATE
