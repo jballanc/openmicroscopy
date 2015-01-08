@@ -2316,13 +2316,13 @@ BEGIN
       --
       SELECT count(*) INTO chldChk FROM originalfile
         WHERE path = :OLD.path || :OLD.name || '/';
-      IF NVL(chldChk,0) <> 0
+      IF NVL(chldChk,0) <> 0 THEN
         -- CANCEL DELETE
         RAISE_APPLICATION_ERROR(-20000, 'Directory('||:OLD.id||')='||:OLD.path||:OLD.name||'/ is not empty!');
       END IF;
     END IF;
   END IF;
-  return :OLD; -- proceed
+  -- proceed
 END fs_dir_delete;
 /
 
@@ -2334,7 +2334,6 @@ BEGIN
   IF :OLD.mimetype = 'Directory' AND :NEW.mimetype != 'Directory' THEN
     RAISE_APPLICATION_ERROR(-20001, 'Directory('||:OLD.id||')='||:OLD.path||:OLD.name||'/ must remain a Directory');
   END IF;
-  RETURN :NEW;
 END fs_dir_mimetype;
 /
 
@@ -2350,7 +2349,6 @@ BEGIN
       RAISE_APPLICATION_ERROR(-20003, 'cannot remove user group membership for root');
     END IF;
   END IF;
-  RETURN :OLD;
 END prevent_root_delete;
 /
 
@@ -2368,7 +2366,6 @@ BEGIN
       END IF;
     END IF;
   END IF;
-  RETURN :NEW;
 END prevent_root_update;
 /
 
@@ -2401,7 +2398,6 @@ BEGIN
       RAISE_APPLICATION_ERROR(-20008, 'cannot rename guest experimenter group');
     END IF;
   END IF;
-  RETURN :NEW;
 END prvnt_group_rename;
 /
 
