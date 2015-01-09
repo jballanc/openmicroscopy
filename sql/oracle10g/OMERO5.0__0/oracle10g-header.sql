@@ -157,3 +157,13 @@ BEGIN
 END;
 /
 
+--
+-- Oracle has `bitand` but not a corresponding `or`
+--
+CREATE OR REPLACE FUNCTION bitor(a in number, b in number) RETURN NUMBER
+IS
+BEGIN
+  RETURN (a + b) - bitand(a, b);
+END bitor;
+/
+
