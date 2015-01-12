@@ -2,7 +2,7 @@
  * org.openmicroscopy.shoola.env.data.OMEROGateway
  *
  *------------------------------------------------------------------------------
- *  Copyright (C) 2006-2014 University of Dundee. All rights reserved.
+ *  Copyright (C) 2006-2015 University of Dundee. All rights reserved.
  *
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -8316,6 +8316,7 @@ class OMEROGateway
 			List<IObject> l;
 			Iterator<IObject> j;
 			List<Request> commands = new ArrayList<Request>();
+			List<Save> saves = new ArrayList<Save>();
 			Chgrp cmd;
 			long id;
 			Save save;
@@ -8335,7 +8336,7 @@ class OMEROGateway
 					while (j.hasNext()) {
 						save = new Save();
 						save.obj = j.next();
-						commands.add(save);
+						saves.add(save);
 					}
 				}
 			}
@@ -8364,7 +8365,7 @@ class OMEROGateway
 							while (j.hasNext()) {
 								save = new Save();
 								save.obj = j.next();
-								commands.add(save);
+								saves.add(save);
 							}
 						}
 					}
@@ -8386,11 +8387,12 @@ class OMEROGateway
 						while (j.hasNext()) {
 							save = new Save();
 							save.obj = j.next();
-							commands.add(save);
+							saves.add(save);
 						}
 					}
 				}
 			}
+			commands.addAll(saves);
 			return c.submit(commands, target);
 		} catch (Throwable e) {
 			handleException(e, "Cannot transfer the data.");
