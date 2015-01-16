@@ -67,12 +67,19 @@
      <constructor-arg ref="roles"/>
   </bean>
 
+  <!--
+
+  The insert trigger check was only needed to repair a bug introduced in 5.0. Since this
+  bug is not present in the Oracle branch, and because the names in the bean all violate
+  Oracle length restrictions, don't load this bean with Oracle.
+
   <bean id="dbInsertTriggerCheck" depends-on="dbPatchCheck"
      class="ome.services.util.DBInsertTriggerCheck"
      init-method="start" lazy-init="false">
      <constructor-arg ref="executor"/>
      <constructor-arg ref="simpleSqlAction"/>
   </bean>
+  -->
 
   <bean id="dbFileSizeChecksumCheck" depends-on="dbPatchCheck"
      class="ome.services.util.DBFileSizeChecksumCheck"
