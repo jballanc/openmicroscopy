@@ -448,7 +448,25 @@ alter  table originalfile add (repo varchar(36));
 alter  table originalfile add (params PARAMS_MAP);
 create index originalfile_mime_index on originalfile (mimetype);
 create index originalfile_repo_index on originalfile (repo);
-create unique index originalfile_repo_path_index on originalfile (repo, path, name);
+
+-- Because of the way that Oracle handles indexing multi-part keys when some elements are
+-- `null` (i.e. it is not possible to index `where repo is not null` as in Postgres), we
+-- create an extra `reponame` column that will be populated with a new UUID-tagged string
+-- for each item in the local repo (i.e. where `repo` is null).
+alter table originalfile add (reponame varchar(42) not null);
+create unique index originalfile_unique_path on originalfile (reponame, path, name);
+
+CREATE OR REPLACE TRIGGER unique_repo_path
+BEFORE INSERT OR UPDATE ON originalfile
+FOR EACH ROW
+BEGIN
+  IF :NEW.repo is NULL THEN
+    :NEW.reponame := 'local-'||uuid();
+  ELSE
+    :NEW.reponame := :NEW.repo;
+  END IF;
+END unique_repo_path;
+/
 
 --
 -- end ticket:2201
