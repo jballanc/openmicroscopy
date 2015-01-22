@@ -8,6 +8,7 @@ omero.db.dialect=ome.dialects.Oracle10gDialect
 omero.db.generate_dialect=ome.dialects.Oracle10gDialect
 omero.db.sql_action_class=ome.util.actions.Oracle10gSqlAction
 omero.db.lob_handler=org.springframework.jdbc.support.lob.OracleLobHandler
+omero.db.org=com.oracle
 omero.db.jar=ojdbc6_g
 omero.db.jar_version=11.2.0.4
 omero.db.delimiter=;
