@@ -1430,7 +1430,7 @@
     );
 
     create table parsejob (
-        params RAW(255),
+        params BLOB,
         job_id number(19,0) not null,
         primary key (job_id)
     );
@@ -1934,7 +1934,7 @@
         x2 double precision,
         y1 double precision,
         y2 double precision,
-        bytes RAW(255),
+        bytes BLOB,
         height double precision,
         width double precision,
         d varchar2(255 char),
@@ -1953,7 +1953,7 @@
 
     create table share_ (
         active number(1,0) not null,
-        data RAW(255) not null,
+        data BLOB not null,
         itemCount number(19,0) not null,
         session_id number(19,0) not null,
         "group" number(19,0) not null,

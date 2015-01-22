@@ -114,7 +114,7 @@ hibernate.dialect=${omero.db.generate_dialect}
                     </replaceregexp>
                     <replaceregexp
                       match="bytea"
-                      replace="RAW(255)"
+                      replace="BLOB"
                       flags="gs" byline="false">
                       <fileset dir="${resrc.dest}" includes="ddl.sql"/>
                     </replaceregexp>
