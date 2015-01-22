@@ -57,5 +57,7 @@
     <dependency org="org.springframework.security" name="spring-security-config" rev="${versions.spring-security}"/>
     <dependency org="org.springframework.security" name="spring-security-ldap" rev="${versions.spring-security}"/>
     <dependency org="org.springframework.ldap" name="spring-ldap" rev="${versions.spring-ldap}-all"/>
+    <!-- Oracle -->
+    <dependency org="com.oracle" name="ojdbc6_g" rev="11.2.0.4"/>
   </dependencies>
 </ivy-module>
