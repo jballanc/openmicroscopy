@@ -600,13 +600,22 @@ public class ImportCandidates extends DirectoryWalker
 
         containers.add(info);
         allFiles.addAll(Arrays.asList(info.getUsedFiles()));
-        for (String string : info.getUsedFiles()) {
+
+        if (count > 1) {
+          for (String string : info.getUsedFiles()) {
             List<String> users = usedBy.get(string);
             if (users == null) {
                 users = new ArrayList<String>();
                 usedBy.put(string, users);
             }
             users.add(file.getAbsolutePath());
+          }
+        }
+        else {
+          // if 'users' is empty, the import will not be processed
+          List<String> users = new ArrayList<String>();
+          users.add(file.getAbsolutePath());
+          usedBy.put(file.getAbsolutePath(), users);
         }
     }
 
