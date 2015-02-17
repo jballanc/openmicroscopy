@@ -29,7 +29,7 @@ module omero {
                 idempotent int getBitDepth(omero::model::PixelsType type) throws ServerError;
                 idempotent omero::model::IObject getEnumeration(string enumClass, string value) throws ServerError;
                 idempotent IObjectList getAllEnumerations(string enumClass) throws ServerError;
-                idempotent omero::api::StringStringMap getPixelsParams(long pixId) throws ServerError;
+                idempotent omero::api::StringStringMap getPixelsParams(long imageId) throws ServerError;
                 omero::RLong copyAndResizePixels(long pixelsId,
                                                  omero::RInt sizeX,
                                                  omero::RInt sizeY,

@@ -345,7 +345,9 @@ public class PixelsImpl extends AbstractLevel2Service implements IPixels {
 	}
 
     @RolesAllowed("user")
-    public Map<String, String> getPixelsParams(long pixelsId) {
+    public Map<String, String> getPixelsParams(long imageId) {
+        Image image = iQuery.get(Image.class, imageId);
+        long pixelsId = image.getPrimaryPixels().getId();
         return sql.getPixelsParams(pixelsId);
     }
 

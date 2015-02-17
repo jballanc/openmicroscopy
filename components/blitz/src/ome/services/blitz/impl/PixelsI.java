@@ -90,8 +90,8 @@ public class PixelsI extends AbstractAmdServant implements _IPixelsOperations {
     }
 
     public void getPixelsParams_async(AMD_IPixels_getPixelsParams __cb,
-            long pixId, Current __current) throws ServerError {
-        callInvokerOnRawArgs(__cb, __current, pixId);
+            long imageId, Current __current) throws ServerError {
+        callInvokerOnRawArgs(__cb, __current, imageId);
     }
 
     public void loadRndSettings_async(AMD_IPixels_loadRndSettings __cb,
