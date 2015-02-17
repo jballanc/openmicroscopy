@@ -227,20 +227,6 @@ class TestChgrp(lib.ITest):
             type="/Image", id=images[0].id.val, grp=target_gid)
         self.doAllSubmit([chgrp], client, test_should_pass=False)
 
-        # 10846 - multiple constraints are no longer being collected.
-        # in fact, even single constraints are not being directly directed
-        # since fileset cleanup is happening at the end of the transaction
-        # disabling and marking in ticket.
-        # The delete should fail due to the fileset
-        # The chgrp should fail due to the fileset
-        # ## assert 'Fileset' in rsp.constraints,\
-        # ##     "chgrp should fail due to 'Fileset' constraints"
-        # ## failedFilesets = rsp.constraints['Fileset']
-        # ## assert len(failedFilesets) ==  1,\
-        # ##     "chgrp should fail due to a single Fileset"
-        # ## assert failedFilesets[0] ==  filesetId,\
-        # ##     "chgrp should fail due to this Fileset"
-
     def testChgrpAllImagesFilesetOK(self):
         """
         Simple example of the MIF chgrp bad case:
@@ -292,24 +278,30 @@ class TestChgrp(lib.ITest):
             link.setChild(images[i].proxy())
             link = update.saveAndReturnObject(link)
 
-        # chgrp should fail...
+        # chgrp should succeed with the first Dataset only
         chgrp = omero.cmd.Chgrp(
             type="/Dataset", id=datasets[0].id.val, grp=target_gid)
-        self.doAllSubmit([chgrp], client, test_should_pass=False)
+        self.doAllSubmit([chgrp], client)
 
-        # 10846 - multiple constraints are no longer being collected.
-        # in fact, even single constraints are not being directly directed
-        # since fileset cleanup is happening at the end of the transaction
-        # disabling and marking in ticket.
-        # The delete should fail due to the fileset
-        # ...due to the fileset
-        # ## assert 'Fileset' in rsp.constraints,
-        # ##     "chgrp should fail due to 'Fileset' constraints"
-        # ## failedFilesets = rsp.constraints['Fileset']
-        # ## assert len(failedFilesets) ==  1,\
-        # ##     "chgrp should fail due to a single Fileset"
-        # ## assert failedFilesets[0] ==  filesetId,
-        # ##     "chgrp should fail due to this Fileset"
+        queryService = client.sf.getQueryService()
+
+        # Check Images not moved
+        for i in range(2):
+            image = queryService.get('Image', images[i].id.val)
+            assert target_gid != image.details.group.id.val,\
+                "Image should not be in group: %s" % target_gid
+
+        # Check second Dataset not moved
+        dataset = queryService.get('Dataset', datasets[1].id.val)
+        assert target_gid != dataset.details.group.id.val,\
+            "Dataset should not be in group: %s" % target_gid
+
+        ctx = {'omero.group': str(target_gid)}  # query in the target group
+
+        # Check first Dataset moved
+        dataset = queryService.get('Dataset', datasets[0].id.val, ctx)
+        assert target_gid == dataset.details.group.id.val,\
+            "Dataset should be in group: %s" % target_gid
 
     def testChgrpAllDatasetsFilesetOK(self):
         """
@@ -408,20 +400,6 @@ class TestChgrp(lib.ITest):
             type="/Image", id=imagesFsTwo[0].id.val, grp=target_gid)
         self.doAllSubmit([chgrp1, chgrp2], client, test_should_pass=False)
 
-        # 10846 - multiple constraints are no longer being collected.
-        # in fact, even single constraints are not being directly directed
-        # since fileset cleanup is happening at the end of the transaction
-        # disabling and marking in ticket.
-        # The delete should fail due to the fileset
-        # ...due to the filesets
-        # ## assert 'Fileset' in rsp.constraints,
-        # ##     "chgrp should fail due to 'Fileset' constraints"
-        # ## failedFilesets = rsp.constraints['Fileset']
-        # ## assert len(failedFilesets) ==  2,\
-        # ##     "chgrp should fail due to a Two Filesets"
-        # ## self.assertTrue(filesetOneId in failedFilesets)
-        # ## self.assertTrue(filesetTwoId in failedFilesets)
-
     def testChgrpDatasetTwoFilesetsErr(self):
         """
         If we try to 'split' 2 Filesets, both should be returned
@@ -446,23 +424,24 @@ class TestChgrp(lib.ITest):
             link.setChild(i[0].proxy())
             link = update.saveAndReturnObject(link)
 
-        # chgrp should fail...
+        # chgrp should succeed with the Dataset only
         chgrp = omero.cmd.Chgrp(type="/Dataset", id=ds.id.val, grp=target_gid)
-        self.doAllSubmit([chgrp], client, test_should_pass=False)
+        self.doAllSubmit([chgrp], client)
 
-        # 10846 - multiple constraints are no longer being collected.
-        # in fact, even single constraints are not being directly directed
-        # since fileset cleanup is happening at the end of the transaction
-        # disabling and marking in ticket.
-        # The delete should fail due to the fileset
-        # ...due to the filesets
-        # ## assert 'Fileset' in rsp.constraints,
-        # ##     "chgrp should fail due to 'Fileset' constraints"
-        # ## failedFilesets = rsp.constraints['Fileset']
-        # ## assert len(failedFilesets) ==  2,\
-        # ##     "chgrp should fail due to a Two Filesets"
-        # ## self.assertTrue(filesetOneId in failedFilesets)
-        # ## self.assertTrue(filesetTwoId in failedFilesets)
+        queryService = client.sf.getQueryService()
+
+        # Check Images not moved
+        for i in (imagesFsOne[0], imagesFsTwo[0]):
+            image = queryService.get('Image', i.id.val)
+            assert target_gid != image.details.group.id.val,\
+                "Image should not be in group: %s" % target_gid
+
+        ctx = {'omero.group': str(target_gid)}  # query in the target group
+
+        # Check Dataset moved
+        dataset = queryService.get('Dataset', ds.id.val, ctx)
+        assert target_gid == dataset.details.group.id.val,\
+            "Dataset should be in group: %s" % target_gid
 
     def testChgrpDatasetCheckFsGroup(self):
         """
@@ -599,6 +578,497 @@ class TestChgrp(lib.ITest):
         with pytest.raises(omero.ValidationException):
             query.get("ScreenPlateLink", link.id.val, {"omero.group": "-1"})
 
+    def testChgrpDatasetWithImage(self):
+        """
+        D->I
+        ChGrp D
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+        update = client.sf.getUpdateService()
+
+        d = self.make_dataset(client=client)
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(d, i, client)
+        self.change_group([d], target_gid, client)
+
+        ctx = {'omero.group': '-1'}
+        assert target_gid == query.get("Image",
+                                       i.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Dataset",
+                                       d.id.val, ctx).details.group.id.val
+
+    def testChgrpPDIReverseLinkOrder(self):
+        """
+        P->D->I
+        ChGrp P
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+        update = client.sf.getUpdateService()
+
+        p = self.make_project(client=client)
+        d = self.make_dataset(client=client)
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(p, d, client)
+        self.link(d, i, client)
+        self.change_group([p], target_gid, client)
+
+        ctx = {'omero.group': '-1'}
+        assert target_gid == query.get("Project",
+                                       p.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Dataset",
+                                       d.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Image",
+                                       i.id.val, ctx).details.group.id.val
+
+    def testChgrpTwoDatasetsLinkedToSingleImageDefault(self):
+        """
+        D1->I
+        D2->I
+        ChGrp D1
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+        update = client.sf.getUpdateService()
+
+        d1 = self.make_dataset(client=client)
+        d2 = self.make_dataset(client=client)
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(d1, i, client)
+        self.link(d2, i, client)
+        self.change_group([d1], target_gid, client)
+
+        ctx = {'omero.group': '-1'}
+        assert target_gid == query.get("Dataset",
+                                       d1.id.val, ctx).details.group.id.val
+        assert target_gid != query.get("Dataset",
+                                       d2.id.val, ctx).details.group.id.val
+        assert target_gid != query.get("Image",
+                                       i.id.val, ctx).details.group.id.val
+
+    def testChgrpTwoDatasetsLinkedToSingleImageHard(self):
+        """
+        D1->I
+        D2->I
+        ChGrp D1
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+        update = client.sf.getUpdateService()
+
+        d1 = self.make_dataset(client=client)
+        d2 = self.make_dataset(client=client)
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(d1, i, client)
+        self.link(d2, i, client)
+
+        chgrp = omero.cmd.Chgrp(
+            type="/Dataset", id=d1.id.val, grp=target_gid,
+            options={"/Image": "HARD"})
+        self.doSubmit(chgrp, client)
+
+        ctx = {'omero.group': '-1'}
+        assert target_gid == query.get("Dataset",
+                                       d1.id.val, ctx).details.group.id.val
+        assert target_gid != query.get("Dataset",
+                                       d2.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Image",
+                                       i.id.val, ctx).details.group.id.val
+
+    def testChgrpProjectWithDatasetLinkedToImageWithOtherDatasetDefault(self):
+        """
+        P->D1->I
+           D2->I
+        ChGrp P
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+        update = client.sf.getUpdateService()
+
+        p = self.make_project(client=client)
+        d1 = self.make_dataset(client=client)
+        d2 = self.make_dataset(client=client)
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(d1, i, client)
+        self.link(d2, i, client)
+        self.link(p, d1, client)
+        self.change_group([p], target_gid, client)
+
+        ctx = {'omero.group': '-1'}
+        assert target_gid == query.get("Project",
+                                       p.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Dataset",
+                                       d1.id.val, ctx).details.group.id.val
+        assert target_gid != query.get("Image",
+                                       i.id.val, ctx).details.group.id.val
+
+    def testChgrpProjectWithDatasetLinkedToImageWithOtherDatasetHard(self):
+        """
+        P->D1->I
+           D2->I
+        ChGrp P
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+        update = client.sf.getUpdateService()
+
+        p = self.make_project(client=client)
+        d1 = self.make_dataset(client=client)
+        d2 = self.make_dataset(client=client)
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(d1, i, client)
+        self.link(d2, i, client)
+        self.link(p, d1, client)
+
+        chgrp = omero.cmd.Chgrp(
+            type="/Project", id=p.id.val, grp=target_gid,
+            options={"/Image": "HARD"})
+        self.doSubmit(chgrp, client)
+
+        ctx = {'omero.group': '-1'}
+        assert target_gid == query.get("Project",
+                                       p.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Dataset",
+                                       d1.id.val, ctx).details.group.id.val
+        assert target_gid != query.get("Dataset",
+                                       d2.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Image",
+                                       i.id.val, ctx).details.group.id.val
+
+    def testChgrpDatasetWithImageLinkedToTwoProjects(self):
+        """
+        P1->D->I
+        P2->D->I
+        ChGrp D
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+        update = client.sf.getUpdateService()
+
+        p1 = self.make_project(client=client)
+        p2 = self.make_project(client=client)
+        d = self.make_dataset(client=client)
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(p1, d, client)
+        self.link(p2, d, client)
+        self.link(d, i, client)
+        self.change_group([d], target_gid, client)
+
+        ctx = {'omero.group': '-1'}
+
+        assert not target_gid == query.get("Project",
+                                           p1.id.val, ctx).details.group.id.val
+        assert not target_gid == query.get("Project",
+                                           p2.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Dataset",
+                                       d.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Image",
+                                       i.id.val, ctx).details.group.id.val
+
+    def testChgrpProjectLinkedToDatasetAndImageDefault(self):
+        """
+        P1->D->I
+        P2->D->I
+        ChGrp P1
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+        update = client.sf.getUpdateService()
+
+        p1 = self.make_project(client=client)
+        p2 = self.make_project(client=client)
+        d = self.make_dataset(client=client)
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(p1, d, client)
+        self.link(p2, d, client)
+        self.link(d, i, client)
+        self.change_group([p1], target_gid, client)
+
+        ctx = {'omero.group': '-1'}
+        assert target_gid == query.get("Project",
+                                       p1.id.val, ctx).details.group.id.val
+        assert target_gid != query.get("Dataset",
+                                       d.id.val, ctx).details.group.id.val
+        assert target_gid != query.get("Image",
+                                       i.id.val, ctx).details.group.id.val
+
+    def testChgrpProjectLinkedToDatasetAndImageHard(self):
+        """
+        P1->D->I
+        P2->D->I
+        ChGrp P1
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+        update = client.sf.getUpdateService()
+
+        p1 = self.make_project(client=client)
+        p2 = self.make_project(client=client)
+        d = self.make_dataset(client=client)
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(p1, d, client)
+        self.link(p2, d, client)
+        self.link(d, i, client)
+
+        chgrp = omero.cmd.Chgrp(
+            type="/Project", id=p1.id.val, grp=target_gid,
+            options={"/Dataset": "HARD"})
+        self.doSubmit(chgrp, client)
+
+        ctx = {'omero.group': '-1'}
+        assert target_gid == query.get("Project",
+                                       p1.id.val, ctx).details.group.id.val
+        assert target_gid != query.get("Project",
+                                       p2.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Dataset",
+                                       d.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Image",
+                                       i.id.val, ctx).details.group.id.val
+
+    def testChgrpProjectLinkedToDatasetDefault(self):
+        """
+        P1->D
+        P2->D
+        ChGrp P1
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+
+        p1 = self.make_project(client=client)
+        p2 = self.make_project(client=client)
+        d = self.make_dataset(client=client)
+        self.link(p1, d, client)
+        self.link(p2, d, client)
+        self.change_group([p1], target_gid, client)
+
+        ctx = {'omero.group': '-1'}
+        assert target_gid == query.get("Project",
+                                       p1.id.val, ctx).details.group.id.val
+        assert target_gid != query.get("Dataset",
+                                       d.id.val, ctx).details.group.id.val
+
+    def testChgrpProjectLinkedToDatasetHard(self):
+        """
+        P1->D
+        P2->D
+        ChGrp P1
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+
+        p1 = self.make_project(client=client)
+        p2 = self.make_project(client=client)
+        d = self.make_dataset(client=client)
+        self.link(p1, d, client)
+        self.link(p2, d, client)
+
+        chgrp = omero.cmd.Chgrp(
+            type="/Project", id=p1.id.val, grp=target_gid,
+            options={"/Dataset": "HARD"})
+        self.doSubmit(chgrp, client)
+
+        ctx = {'omero.group': '-1'}
+        assert target_gid == query.get("Project",
+                                       p1.id.val, ctx).details.group.id.val
+        assert target_gid != query.get("Project",
+                                       p2.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Dataset",
+                                       d.id.val, ctx).details.group.id.val
+
+    def testChgrpProjectLinkedToTwoDatasetsAndImage(self):
+        """
+        P->D1->I
+        P->D2->I
+        ChGrp P
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        client, user = self.new_client_and_user(perms=PRIVATE)
+        admin = client.sf.getAdminService()
+        target_grp = self.new_group([user], perms=PRIVATE)
+        target_gid = target_grp.id.val
+        admin.getEventContext()  # Refresh
+
+        query = client.sf.getQueryService()
+        update = client.sf.getUpdateService()
+
+        p = self.make_project(client=client)
+        d1 = self.make_dataset(client=client)
+        d2 = self.make_dataset(client=client)
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(p, d1, client)
+        self.link(p, d2, client)
+        self.link(d1, i, client)
+        self.link(d2, i, client)
+        self.change_group([p], target_gid, client)
+
+        ctx = {'omero.group': '-1'}
+        assert target_gid == query.get("Project",
+                                       p.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Dataset",
+                                       d1.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Dataset",
+                                       d2.id.val, ctx).details.group.id.val
+        assert target_gid == query.get("Image",
+                                       i.id.val, ctx).details.group.id.val
+
+    def testIntergroupLinks(self):
+        # create read-annotate group 'read-annotate' with implicit owner
+        ra_group = self.new_group(perms=READANNOTATE)
+        self.new_user(group=ra_group, owner=True)
+
+        # create private group 'private' with implicit owner
+        p_group = self.new_group(perms=PRIVATE)
+        self.new_user(group=p_group, owner=True)
+
+        # create new user 'image-owner' who is a member of both 'read-annotate'
+        # and 'private'
+        io_client, image_owner = self.new_client_and_user(group=ra_group)
+        self.add_groups(image_owner, [p_group])
+
+        # create new user 'tag-owner' who is a member of both 'read-annotate'
+        # and 'private'
+        to_client, tag_owner = self.new_client_and_user(group=ra_group)
+        self.add_groups(tag_owner, [p_group])
+
+        # switch user to 'image-owner'
+        # import two images into 'read-annotate'
+        images = []
+        for x in range(0, 2):
+            images.append(self.importSingleImage(client=io_client))
+            image = io_client.sf.getQueryService().get("Image",
+                                                       images[x].id.val)
+            assert ra_group.id.val == image.details.group.id.val
+
+        # switch user to tag-owner
+        # tag both image-owner's images with the same new tag
+        tag = TagAnnotationI()
+        tag.textValue = rstring("tag from user %s" %
+                                tag_owner.getOmeName().val)
+        tag = to_client.sf.getUpdateService().saveAndReturnObject(tag)
+        assert tag_owner.id.val == tag.details.owner.id.val
+        links = []
+        for image in images:
+            link = ImageAnnotationLinkI()
+            link.setParent(image)
+            link.setChild(tag)
+            links.append(to_client.sf.getUpdateService()
+                         .saveAndReturnObject(link))
+
+        # (shell) as root
+        # run bin/omero hql --all 'select parent.details.group.id,
+        # child.details.group.id from ImageAnnotationLink'
+        # and observe that for each row
+        # the group ID in Col1 matches that in Col2
+        for link in links:
+            assert link.parent.details.group.id == link.child.details.group.id
+
+        # switch user to image-owner
+        # right-click one of the images and move it to private
+        self.change_group([images[0]], p_group.id.val, io_client)
+
+        # (shell) as root
+        # run bin/omero hql --all 'select parent.details.group.id,
+        # child.details.group.id from ImageAnnotationLink' and recoil in horror
+        params = omero.sys.ParametersI()
+        params.addId(tag.id.val)
+        ctx = {"omero.group": "-1"}
+        query = "select parent.details.group.id,"
+        query += " child.details.group.id from ImageAnnotationLink"
+        query += " where child.id = :id"
+        links = unwrap(self.root.sf.getQueryService().projection(query, params,
+                                                                 ctx))
+        assert links is not None
+        for link in links:
+            assert link[0] == link[1]
 
 class TestChgrpTarget(lib.ITest):
 

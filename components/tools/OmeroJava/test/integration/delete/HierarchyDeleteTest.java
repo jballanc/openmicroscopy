@@ -83,7 +83,6 @@ public class HierarchyDeleteTest extends AbstractServerTest {
      * @throws Exception
      *             Thrown if an error occurred.
      */
-    @Test(groups = {"ticket:3031", "broken"})
     public void testDeletingDataset() throws Exception {
 
         newUserAndGroup("rwrw--");
@@ -129,7 +128,6 @@ public class HierarchyDeleteTest extends AbstractServerTest {
      * @throws Exception
      *             Thrown if an error occurred.
      */
-    @Test(groups = {"ticket:3031", "broken"})
     public void testDeletingDatasetDoesntRemoveImageAnnotation()
             throws Exception {
 
@@ -173,7 +171,6 @@ public class HierarchyDeleteTest extends AbstractServerTest {
      * @throws Exception
      *             Thrown if an error occurred.
      */
-    @Test(groups = {"ticket:3031", "ticket:3032", "broken"})
     public void testDeletingDatasetDoesntRemoveImageRoi() throws Exception {
 
         newUserAndGroup("rwrw--");
@@ -435,7 +432,7 @@ public class HierarchyDeleteTest extends AbstractServerTest {
             /* Follow links to determine which entities are expected to remain afterward. */
 
             final Set<Long> expectedRuns    = new HashSet<Long>();
-            final Set<Long> expectedWells   = new HashSet<Long>();
+            final Set<Long> expectedWells   = allWells;
             final Set<Long> expectedSamples = new HashSet<Long>();
             final Set<Long> expectedImages  = new HashSet<Long>();
 
@@ -445,7 +442,9 @@ public class HierarchyDeleteTest extends AbstractServerTest {
                 expectedSamples.addAll(runsToSamples.get(runId));
             }
             for (final Long sampleId : expectedSamples) {
-                expectedWells.add(samplesToWells.get(sampleId));
+                /* expectedWells.add(samplesToWells.get(sampleId));
+                 * if deleting a well's samples ought to delete the well
+                 */
                 expectedImages.add(samplesToImages.get(sampleId));
             }
 

@@ -443,24 +443,10 @@ class TestDelete(lib.ITest):
 
         # Now delete one dataset
         delete = omero.cmd.Delete("/Dataset", datasets[0].id.val, None)
-        self.doAllSubmit([delete], client, test_should_pass=False)
+        self.doAllSubmit([delete], client)
 
-        # 10846 - multiple constraints are no longer being collected.
-        # in fact, even single constraints are not being directly directed
-        # since fileset cleanup is happening at the end of the transaction
-        # disabling and marking in ticket.
-        # The delete should fail due to the fileset
-        # ## assert 'Fileset' in rsp.constraints,\
-        # ##     "delete should fail due to 'Fileset' constraints"
-        # ## failedFilesets = rsp.constraints['Fileset']
-        # ## assert len(failedFilesets) ==  1,\
-        # ##     "delete should fail due to a single Fileset"
-        # ## assert failedFilesets[0] ==  filesetId,\
-        # ##     "delete should fail due to this Fileset"
-
-        # Neither image or the dataset should be deleted.
-        assert datasets[0].id.val == \
-            query.find("Dataset", datasets[0].id.val).id.val
+        # The dataset should be deleted, but not any images.
+        assert not query.find("Dataset", datasets[0].id.val)
         assert images[0].id.val == query.find("Image", images[0].id.val).id.val
         assert images[1].id.val == query.find("Image", images[1].id.val).id.val
 
@@ -477,20 +463,8 @@ class TestDelete(lib.ITest):
         query = client.sf.getQueryService()
 
         # Now delete one image
-        omero.cmd.Delete("/Image", images[0].id.val, None)
-
-        # 10846 - multiple constraints are no longer being collected.
-        # in fact, even single constraints are not being directly directed
-        # since fileset cleanup is happening at the end of the transaction
-        # disabling and marking in ticket.
-        # ## # The delete should fail due to the fileset
-        # ## assert 'Fileset' in rsp.constraints,\
-        # ##     "delete should fail due to 'Fileset' constraints"
-        # ## failedFilesets = rsp.constraints['Fileset']
-        # ## assert len(failedFilesets) ==  1,\
-        # ##     "delete should fail due to a single Fileset"
-        # ## assert failedFilesets[0] ==  filesetId,\
-        # ##     "delete should fail due to this Fileset"
+        delete = omero.cmd.Delete("/Image", images[0].id.val, None)
+        self.doAllSubmit([delete], client, test_should_pass=False)
 
         # Neither image should be deleted.
         assert images[0].id.val == query.find("Image", images[0].id.val).id.val
@@ -613,19 +587,6 @@ class TestDelete(lib.ITest):
         delete2 = omero.cmd.Delete("/Image", imagesFsTwo[0].id.val, None)
         self.doAllSubmit([delete1, delete2], client, test_should_pass=False)
 
-        # 10846 - multiple constraints are no longer being collected.
-        # in fact, even single constraints are not being directly directed
-        # since fileset cleanup is happening at the end of the transaction
-        # disabling and marking in ticket.
-        # ...due to the filesets
-        # ## assert 'Fileset' in rsp.constraints,\
-        # ##     "Delete should fail due to 'Fileset' constraints"
-        # ## failedFilesets = rsp.constraints['Fileset']
-        # ## assert len(failedFilesets) ==  2,\
-        # ##     "Delete should fail due to a Two Filesets"
-        # ## assert filesetOneId in failedFilesets
-        # ## assert filesetTwoId in failedFilesets
-
     def testDeleteDatasetTwoFilesetsErr(self):
         """
         If we try to partially delete 2 Filesets, both should be returned
@@ -648,22 +609,181 @@ class TestDelete(lib.ITest):
             link.setChild(i[0].proxy())
             link = update.saveAndReturnObject(link)
 
-        # delete should fail...
+        # delete should remove only the Dataset
         delete = omero.cmd.Delete("/Dataset", ds.id.val, None)
-        self.doAllSubmit([delete], client, test_should_pass=False)
+        self.doAllSubmit([delete], client)
 
-        # 10846 - multiple constraints are no longer being collected.
-        # in fact, even single constraints are not being directly directed
-        # since fileset cleanup is happening at the end of the transaction
-        # disabling and marking in ticket.
-        # ...due to the filesets
-        # ## assert 'Fileset' in rsp.constraints,\
-        # ##     "Delete should fail due to 'Fileset' constraints"
-        # ## failedFilesets = rsp.constraints['Fileset']
-        # ## assert len(failedFilesets) ==  2,\
-        # ##     "Delete should fail due to a Two Filesets"
-        # ## assert filesetOneId in failedFilesets
-        # ## assert filesetTwoId in failedFilesets
+        query = client.sf.getQueryService()
+
+        # The dataset should be deleted.
+        assert not query.find("Dataset", ds.id.val)
+
+        # Neither image should be deleted.
+        for i in (imagesFsOne[0], imagesFsTwo[0]):
+            assert i.id.val == query.find("Image", i.id.val).id.val
+
+    def testDeleteProjectWithOneEmptyDataset(self):
+        """
+        P->D
+        Delete P
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        query = self.client.sf.getQueryService()
+
+        p = self.make_project()
+        d = self.make_dataset()
+        self.link(p, d)
+        self.delete([p])
+
+        assert not query.find("Project", p.id.val)
+        assert not query.find("Dataset", d.id.val)
+
+    def testDeleteProjectWithEmptyDatasetLinkedToAnotherProjectDefault(self):
+        """
+        P1->D
+        P2->D
+        Delete P1
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        query = self.client.sf.getQueryService()
+
+        p1 = self.make_project()
+        p2 = self.make_project()
+        d = self.make_dataset()
+        self.link(p1, d)
+        self.link(p2, d)
+        self.delete([p1])
+
+        assert query.find("Project", p2.id.val)
+        assert not query.find("Project", p1.id.val)
+        assert query.find("Dataset", d.id.val)
+
+    def testDeleteProjectWithEmptyDatasetLinkedToAnotherProjectHard(self):
+        """
+        P1->D
+        P2->D
+        Delete P1
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        query = self.client.sf.getQueryService()
+
+        p1 = self.make_project()
+        p2 = self.make_project()
+        d = self.make_dataset()
+        self.link(p1, d)
+        self.link(p2, d)
+
+        delete = omero.cmd.Delete(
+            type="/Project", id=p1.id.val, options={"/Dataset": "HARD"})
+        self.doSubmit(delete, self.client)
+
+        assert query.find("Project", p2.id.val)
+        assert not query.find("Project", p1.id.val)
+        assert not query.find("Dataset", d.id.val)
+
+    def testDeleteProjectWithDatasetLinkedToAnotherProject(self):
+        """
+        P1->D->I
+        P2->D->I
+        Delete P1
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        query = self.client.sf.getQueryService()
+        update = self.client.sf.getUpdateService()
+
+        p1 = self.make_project()
+        p2 = self.make_project()
+        d = self.make_dataset()
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(p1, d)
+        self.link(p2, d)
+        self.link(d, i)
+        self.delete([p1])
+
+        assert not query.find("Project", p1.id.val)
+        assert query.find("Project", p2.id.val)
+        assert query.find("Dataset", d.id.val)
+        assert query.find("Image", i.id.val)
+
+    def testDeleteDatasetLinkedToTwoProjects(self):
+        """
+        P1->D->I
+        P2->D->I
+        Delete D
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        query = self.client.sf.getQueryService()
+        update = self.client.sf.getUpdateService()
+
+        p1 = self.make_project()
+        p2 = self.make_project()
+        d = self.make_dataset()
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(p1, d)
+        self.link(p2, d)
+        self.link(d, i)
+        self.delete([d])
+
+        assert query.find("Project", p1.id.val)
+        assert query.find("Project", p2.id.val)
+        assert not query.find("Image", i.id.val)
+        assert not query.find("Dataset", d.id.val)
+
+    def testDeleteDatasetWithImageLinkedToAnotherDatasetDefault(self):
+        """
+        D1->I
+        D2->I
+        Delete D1
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        query = self.client.sf.getQueryService()
+        update = self.client.sf.getUpdateService()
+
+        d1 = self.make_dataset()
+        d2 = self.make_dataset()
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(d1, i)
+        self.link(d2, i)
+        self.delete([d1])
+
+        assert not query.find("Dataset", d1.id.val)
+        assert query.find("Dataset", d2.id.val)
+        assert query.find("Image", i.id.val)
+
+    def testDeleteDatasetWithImageLinkedToAnotherDatasetHard(self):
+        """
+        D1->I
+        D2->I
+        Delete D1
+
+        See https://trac.openmicroscopy.org.uk/ome/ticket/12452
+        """
+        query = self.client.sf.getQueryService()
+        update = self.client.sf.getUpdateService()
+
+        d1 = self.make_dataset()
+        d2 = self.make_dataset()
+        i = self.new_image()
+        i = update.saveAndReturnObject(i)
+        self.link(d1, i)
+        self.link(d2, i)
+
+        delete = omero.cmd.Delete(
+            type="/Dataset", id=d1.id.val, options={"/Image": "HARD"})
+        self.doSubmit(delete, self.client)
+
+        assert not query.find("Dataset", d1.id.val)
+        assert query.find("Dataset", d2.id.val)
+        assert not query.find("Image", i.id.val)
 
 if __name__ == '__main__':
     if "TRACE" in os.environ:
