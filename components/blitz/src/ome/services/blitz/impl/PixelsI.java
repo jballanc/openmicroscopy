@@ -20,6 +20,7 @@ import omero.api.AMD_IPixels_createImage;
 import omero.api.AMD_IPixels_getAllEnumerations;
 import omero.api.AMD_IPixels_getBitDepth;
 import omero.api.AMD_IPixels_getEnumeration;
+import omero.api.AMD_IPixels_getPixelsParams;
 import omero.api.AMD_IPixels_loadRndSettings;
 import omero.api.AMD_IPixels_retrievePixDescription;
 import omero.api.AMD_IPixels_retrieveAllRndSettings;
@@ -86,6 +87,11 @@ public class PixelsI extends AbstractAmdServant implements _IPixelsOperations {
             String enumClass, String value, Current __current)
             throws ServerError {
         callInvokerOnRawArgs(__cb, __current, enumClass, value);
+    }
+
+    public void getPixelsParams_async(AMD_IPixels_getPixelsParams __cb,
+            long pixId, Current __current) throws ServerError {
+        callInvokerOnRawArgs(__cb, __current, pixId);
     }
 
     public void loadRndSettings_async(AMD_IPixels_loadRndSettings __cb,
