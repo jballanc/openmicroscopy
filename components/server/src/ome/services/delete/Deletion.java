@@ -345,12 +345,12 @@ public class Deletion {
     public void deleteFiles() {
         StopWatch sw = new Slf4JStopWatch();
         try {
-            _deleteFiles(new Function<String, Set<Long>>() {
-                @Override
-                public Set<Long> apply(String fileType) {
-                    return state.getProcessedIds(fileType);
-                }
-            });
+            files.run();
+            if (files.getFailedFilesCount() > 0) {
+                String warning = files.getWarning();
+                this.warning.append(warning);
+                log.warn(warning);
+            }
         } finally {
             sw.stop("omero.delete.binary");
         }
