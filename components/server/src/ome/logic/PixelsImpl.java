@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +34,7 @@ import ome.model.stats.StatsInfo;
 import ome.parameters.Parameters;
 import ome.system.EventContext;
 import ome.util.PixelData;
+import ome.util.SqlAction;
 
 /**
  * implementation of the Pixels service interface.
@@ -48,6 +50,13 @@ import ome.util.PixelData;
  */
 @Transactional(readOnly = true)
 public class PixelsImpl extends AbstractLevel2Service implements IPixels {
+
+    private transient SqlAction sql;
+
+    public final void setSqlAction(SqlAction sql) {
+        getBeanHelper().throwIfAlreadySet(this.sql, sql);
+        this.sql = sql;
+    }
 
 	/**
 	 * Returns the interface this implementation is for.
@@ -334,6 +343,11 @@ public class PixelsImpl extends AbstractLevel2Service implements IPixels {
 	public <T extends IObject> List<T> getAllEnumerations(Class<T> klass) {
 		return iQuery.findAll(klass, null);
 	}
+
+    @RolesAllowed("user")
+    public Map<String, String> getPixelsParams(long pixelsId) {
+        return sql.getPixelsParams(pixelsId);
+    }
 
 	/**
 	 * Ensures that a particular dimension value is not out of range (ex. less
