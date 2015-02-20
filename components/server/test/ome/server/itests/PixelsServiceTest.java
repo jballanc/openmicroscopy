@@ -163,7 +163,7 @@ public class PixelsServiceTest extends AbstractManagedContextTest {
         params.put(key, value);
         sql.setPixelsParams(p.getId(), params);
 
-        Map<String, String> t = pix.getPixelParams(i.getId());
+        Map<String, String> t = pix.getPixelsParams(i.getId());
         assertEquals(params.size(), t.size());
         assertTrue(t.containsKey(key));
         assertEquals(value, t.get(key));
