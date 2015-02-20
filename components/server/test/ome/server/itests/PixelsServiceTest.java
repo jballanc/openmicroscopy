@@ -10,6 +10,8 @@ package ome.server.itests;
 
 // Third-party libraries
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 
 import ome.api.IPixels;
 import ome.api.RawPixelsStore;
@@ -23,6 +25,7 @@ import ome.model.enums.RenderingModel;
 import ome.parameters.Filter;
 import ome.parameters.Parameters;
 import ome.testing.ObjectFactory;
+import ome.util.SqlAction;
 import omeis.providers.re.RenderingEngine;
 
 import org.slf4j.Logger;
@@ -47,6 +50,7 @@ public class PixelsServiceTest extends AbstractManagedContextTest {
     private static Logger log = LoggerFactory.getLogger(PixelsServiceTest.class);
 
     private IPixels pix;
+    private SqlAction sql;
 
 
     // =========================================================================
@@ -55,6 +59,7 @@ public class PixelsServiceTest extends AbstractManagedContextTest {
     protected void setup() throws Exception {
         // ome.security.Utils.setUserAuth();
         pix = factory.getPixelsService();
+        sql = (SqlAction) applicationContext.getBean("simpleSqlAction");
     }
 
     @Test
@@ -144,5 +149,23 @@ public class PixelsServiceTest extends AbstractManagedContextTest {
         byte[] data = new byte[RomioPixelBuffer.safeLongToInteger(size)];
         raw.setPlane(data, 0, 0, 0);
         raw.getPlane(0, 0, 0);
+    }
+
+    @Test
+    public void testGetPixelsParams() {
+        Pixels p = ObjectFactory.createPixelGraph(null);
+        Image i = factory.getUpdateService().saveAndReturnObject(p.getImage());
+        p = i.getPrimaryPixels();
+
+        Map<String, String> params = new HashMap<String, String>();
+        String key = uuid();
+        String value = uuid();
+        params.put(key, value);
+        sql.setPixelsParams(p.getId(), params);
+
+        Map<String, String> t = pix.getPixelParams(i.getId());
+        assertEquals(params.size(), t.size());
+        assertTrue(t.containsKey(key));
+        assertEquals(value, t.get(key));
     }
 }
