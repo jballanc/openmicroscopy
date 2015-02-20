@@ -52,6 +52,7 @@ public class TestStandard32BitRendererLUTSizes extends BaseRenderingTest
 	{
 		PixelsType pixelsType = new PixelsType();
 		pixelsType.setValue("uint32");
+		pixelsType.setBitSize(32);
 		return pixelsType;
 	}
 	

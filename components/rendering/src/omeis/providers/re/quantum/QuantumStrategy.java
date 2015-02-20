@@ -12,9 +12,9 @@ package omeis.providers.re.quantum;
 // Third-party libraries
 
 // Application-internal dependencies
+import ome.model.core.Pixels;
 import ome.model.display.QuantumDef;
 import ome.model.enums.Family;
-import ome.model.enums.PixelsType;
 import omeis.providers.re.data.PlaneFactory;
 import omeis.providers.re.metadata.StatsFactory;
 
@@ -101,8 +101,8 @@ public abstract class QuantumStrategy {
     /** Reference to a quantumDef object. */
     protected final QuantumDef qDef;
 
-    /** The type of pixels this strategy is for. */
-    protected final PixelsType type;
+    /** The pixels this strategy is for. */
+    protected final Pixels pixels;
 
     /** Reference to the value mapper. */
     protected QuantumMap valueMapper;
@@ -158,25 +158,26 @@ public abstract class QuantumStrategy {
         boolean b = false;
         if (min <= max) {
             double range = max - min;
-            if (PlaneFactory.in(type,
+            if (PlaneFactory.in(pixels.getPixelsType(),
             		new String[] { PlaneFactory.INT8, PlaneFactory.UINT8 })) {
                 if (range < 0x100) {
                     b = true;
                 }
             } else if (PlaneFactory
-                    .in(type, new String[] { PlaneFactory.INT16,
-                    		PlaneFactory.UINT16 })) {
+                    .in(pixels.getPixelsType(), new String[] {
+                            PlaneFactory.INT16, PlaneFactory.UINT16 })) {
                 if (range < 0x10000) {
                     b = true;
                 }
             } else if (PlaneFactory
-                    .in(type, new String[] { PlaneFactory.INT32,
-                            PlaneFactory.UINT32 })) {
+                    .in(pixels.getPixelsType(), new String[] {
+                            PlaneFactory.INT32, PlaneFactory.UINT32 })) {
                 if (range < 0x100000000L) {
                     b = true;
                 }
             } else if (PlaneFactory
-                    .in(type, new String[] { PlaneFactory.FLOAT_TYPE,
+                    .in(pixels.getPixelsType(), new String[] {
+                            PlaneFactory.FLOAT_TYPE,
                             PlaneFactory.DOUBLE_TYPE })) {
                 b = true;
             }
@@ -198,7 +199,7 @@ public abstract class QuantumStrategy {
     private void initPixelsRange(boolean withRange)
     {
         StatsFactory sf = new StatsFactory();
-        double[] values = sf.initPixelsRange(type);
+        double[] values = sf.initPixelsRange(pixels);
         pixelsTypeMin = values[0];
         pixelsTypeMax = values[1];
     }
@@ -207,9 +208,9 @@ public abstract class QuantumStrategy {
      * Creates a new instance.
      * 
      * @param qd The {@link QuantumDef} this strategy is for.
-     * @param pt The pixels type to handle.
+     * @param pixels The pixels to handle.
      */
-    protected QuantumStrategy(QuantumDef qd, PixelsType pt)
+    protected QuantumStrategy(QuantumDef qd, Pixels pixels)
     {
         windowStart = globalMin = 0.0;
         windowEnd = globalMax = 1.0;
@@ -220,10 +221,10 @@ public abstract class QuantumStrategy {
             throw new NullPointerException("No quantum definition");
         }
         this.qDef = qd;
-        if (pt == null) {
-            throw new NullPointerException("No pixel type");
+        if (pixels == null) {
+            throw new NullPointerException("No pixels");
         }
-        this.type = pt;
+        this.pixels = pixels;
         initPixelsRange(false);
     }
 

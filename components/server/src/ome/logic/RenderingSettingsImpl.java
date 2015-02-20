@@ -49,7 +49,6 @@ import ome.model.display.ChannelBinding;
 import ome.model.display.QuantumDef;
 import ome.model.display.RenderingDef;
 import ome.model.enums.Family;
-import ome.model.enums.PixelsType;
 import ome.model.enums.RenderingModel;
 import ome.model.screen.PlateAcquisition;
 import ome.model.screen.Screen;
@@ -100,13 +99,13 @@ public class RenderingSettingsImpl extends AbstractLevel2Service implements
      * Returns the min/max depending on the pixels type if the values
      * have not seen stored.
      * 
-     * @param type The pixels type
+     * @param pixels The pixels.
      * @return See above.
      */
-    private double[] initPixelsRange(PixelsType type)
+    private double[] initPixelsRange(Pixels pixels)
     {
     	StatsFactory factory = new StatsFactory();
-    	return factory.initPixelsRange(type);
+    	return factory.initPixelsRange(pixels);
     }
     
     /**
@@ -837,7 +836,6 @@ public class RenderingSettingsImpl extends AbstractLevel2Service implements
         	StatsInfo stats;
         	double min, max;
             QuantumStrategy qs;
-            PixelsType pt = pixels.getPixelsType();
             double[] range;
             for (int w = 0; w < pixels.sizeOfChannels(); w++) {
                 // FIXME: This is where we need to have the ChannelBinding -->
@@ -847,7 +845,7 @@ public class RenderingSettingsImpl extends AbstractLevel2Service implements
             	channelBinding = channelBindings.get(w);
             	stats = pixels.getChannel(w).getStatsInfo();
             	if (stats == null) {
-            		range = initPixelsRange(pt);
+            		range = initPixelsRange(pixels);
             		min = range[0];
             		max = range[1];
             	} else {
@@ -855,7 +853,7 @@ public class RenderingSettingsImpl extends AbstractLevel2Service implements
                 	max = stats.getGlobalMax().doubleValue();
             	}
             	if (Math.abs(min-max) < EPSILON) { //to be on the save side
-            		qs = quantumFactory.getStrategy(qDef, pt);
+            		qs = quantumFactory.getStrategy(qDef, pixels);
             		min = qs.getPixelsTypeMin();
             		max = qs.getPixelsTypeMax();
             	}
@@ -894,7 +892,6 @@ public class RenderingSettingsImpl extends AbstractLevel2Service implements
         ChannelBinding cb;
         double min, max;
         QuantumStrategy qs;
-        PixelsType pt = pixels.getPixelsType();
         for (int w = 0; w < pixels.sizeOfChannels(); w++) {
             // FIXME: This is where we need to have the ChannelBinding -->
             // Channel linkage. Without it, we have to assume that the order in
@@ -907,7 +904,7 @@ public class RenderingSettingsImpl extends AbstractLevel2Service implements
             min = sf.getInputStart();
             max = sf.getInputEnd();
         	if (Math.abs(min-max) < EPSILON) {
-        		qs = quantumFactory.getStrategy(qDef, pt);
+        		qs = quantumFactory.getStrategy(qDef, pixels);
         		min = qs.getPixelsTypeMin();
         		max = qs.getPixelsTypeMax();
         	}
@@ -1487,7 +1484,7 @@ public class RenderingSettingsImpl extends AbstractLevel2Service implements
                     cb = settings.getChannelBinding(i);
                     stats = pixels.getChannel(i).getStatsInfo();
                     if (stats == null) {
-                    	range = initPixelsRange(pixels.getPixelsType());
+                    	range = initPixelsRange(pixels);
                     	min = range[0];
                     	max = range[1];
                     } else {

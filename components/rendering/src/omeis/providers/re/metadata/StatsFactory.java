@@ -236,49 +236,50 @@ public class StatsFactory {
         return s;
     }
 
-
     /** 
      * Determines the minimum and maximum corresponding to the passed
-     * pixels type.
+     * pixels.
      * 
-     * @param type The pixels type to handle.
+     * @param metadata The pixels to handle.
      */
-    public double[] initPixelsRange(PixelsType type)
+    public double[] initPixelsRange(Pixels metadata)
     {
+        PixelsType type = metadata.getPixelsType();
     	double[] minmax = new double[2];
     	minmax[0] = 0;
     	minmax[1] = 1;
     	if (type == null) return minmax;
+
     	String typeAsString = type.getValue();
-    	if (PlaneFactory.INT8.equals(typeAsString)) {
-    		minmax[0] = -Math.pow(2, 8)/2;
-    		minmax[1] = Math.pow(2, 8)/2-1;
-    	} else if (PlaneFactory.UINT8.equals(typeAsString)) {
-    		minmax[0] = 0;
-    		minmax[1] = Math.pow(2, 8)-1;
-    	} else if (PlaneFactory.INT16.equals(typeAsString)) {
-    		minmax[0] = -Math.pow(2, 16)/2;
-    		minmax[1] = Math.pow(2, 16)/2-1;
-    	} else if (PlaneFactory.UINT16.equals(typeAsString)) {
-    		minmax[0] = 0;
-    		minmax[1] = Math.pow(2, 16)-1;
-    	} else if (PlaneFactory.INT32.equals(typeAsString)) {
-    		minmax[0] = -Math.pow(2, 32)/2;
-			minmax[1] = Math.pow(2, 32)/2-1;
-    	} else if (PlaneFactory.UINT32.equals(typeAsString)) {
-    		minmax[0] = 0;
-			minmax[1] = Math.pow(2, 32)-1;
-    	} else if (PlaneFactory.DOUBLE_TYPE.equals(typeAsString)) {
+        Integer significantBits = metadata.getSignificantBits();
+        if (significantBits == null) {
+            significantBits = type.getBitSize();
+        }
+
+        if (PlaneFactory.INT8.equals(typeAsString)
+            || PlaneFactory.INT16.equals(typeAsString)
+            || PlaneFactory.INT32.equals(typeAsString)) {
+            minmax[0] = -Math.pow(2, significantBits - 1);
+            minmax[1] = Math.pow(2, significantBits - 1) - 1;
+        }
+        if (PlaneFactory.UINT8.equals(typeAsString)
+            || PlaneFactory.UINT16.equals(typeAsString)
+            || PlaneFactory.UINT32.equals(typeAsString)) {
+            minmax[0] = 0;
+            minmax[1] = Math.pow(2, significantBits) - 1;
+        }
+    	if (PlaneFactory.DOUBLE_TYPE.equals(typeAsString)) {
     		//b/c we don't know if it is signed or not
     		minmax[0] = -Double.MAX_VALUE;
 			minmax[1] = Double.MAX_VALUE;
-    	} else if (PlaneFactory.FLOAT_TYPE.equals(typeAsString)) {
+        }
+    	if (PlaneFactory.FLOAT_TYPE.equals(typeAsString)) {
     	    minmax[0] = -Float.MAX_VALUE;
             minmax[1] = Float.MAX_VALUE;
     	}
     	return minmax;
     }
-    
+
     /**
      * Helper object to determine the location of the pixels' values, the
      * inputWindow i.e. <code>inputStart</code> and <code>inputEnd</code>
@@ -298,7 +299,7 @@ public class StatsFactory {
         inputStart = 0;
         inputEnd = 1;
         if (stats == null) {
-        	double[] values = initPixelsRange(metadata.getPixelsType());
+        	double[] values = initPixelsRange(metadata);
         	inputStart = values[0];
         	inputEnd = values[1];
         } else {
