@@ -255,6 +255,7 @@ public class StatsFactory {
         if (significantBits == null) {
             significantBits = type.getBitSize();
         }
+        significantBits = Math.min(significantBits, type.getBitSize());
 
         if (PlaneFactory.INT8.equals(typeAsString)
             || PlaneFactory.INT16.equals(typeAsString)
