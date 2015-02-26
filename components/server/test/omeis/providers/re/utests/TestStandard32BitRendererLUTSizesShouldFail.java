@@ -8,6 +8,8 @@ package omeis.providers.re.utests;
 
 import ome.model.enums.PixelsType;
 import omeis.providers.re.data.PlaneDef;
+import omeis.providers.re.quantum.Quantization_32_bit;
+import omeis.providers.re.quantum.QuantumFactory;
 import omeis.providers.re.quantum.QuantumStrategy;
 
 import org.perf4j.LoggingStopWatch;
@@ -16,6 +18,14 @@ import org.testng.annotations.Test;
 
 public class TestStandard32BitRendererLUTSizesShouldFail extends BaseRenderingTest
 {
+    @Override
+    protected QuantumFactory createQuantumFactory()
+    {
+        TestQuantumFactory qf = new TestQuantumFactory();
+        qf.setStrategy(new Quantization_32_bit(settings.getQuantization(),
+                pixels));
+        return qf;
+    }
 
     @Override
     protected int getSizeX()
