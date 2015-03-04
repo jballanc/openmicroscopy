@@ -190,6 +190,7 @@ class HSBStrategy extends RenderingStrategy {
     		Pixels pixels = new Pixels();
     		PixelsType bitType = new PixelsType();
     		bitType.setValue(PlaneFactory.BIT);
+    		bitType.setBitSize(1);
     		pixels.setPixelsType(bitType);
     		for (int i = 0; i < overlays.size(); i++)
     		{
