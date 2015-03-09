@@ -38,7 +38,7 @@ module omero {
                 void lookupPixels(long pixelsId) throws ServerError;
                 bool lookupRenderingDef(long pixelsId) throws ServerError;
                 void loadRenderingDef(long renderingDefId) throws ServerError;
-                void setOverlays(omero::RLong tablesId, omero::RLong imageId, LongIntMap rowColorMap) throws ServerError;
+                ["deprecated: use omero::romio::PlaneDefWithMasks instead"] void setOverlays(omero::RLong tablesId, omero::RLong imageId, LongIntMap rowColorMap) throws ServerError;
                 void load() throws ServerError;
                 void setModel(omero::model::RenderingModel model) throws ServerError;
                 omero::model::RenderingModel getModel() throws ServerError;
