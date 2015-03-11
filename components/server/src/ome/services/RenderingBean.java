@@ -2002,7 +2002,7 @@ public class RenderingBean implements RenderingEngine, Serializable {
                 new ome.parameters.QueryParameter(
                         "theT", Integer.class, (int) t);
 
-        params.addLong("pid", pid);
+        params.addLong("pixelsId", pid);
         params.add(qpWidth);
         params.add(qpHeight);
         params.add(qpTheZ);
@@ -2064,7 +2064,7 @@ public class RenderingBean implements RenderingEngine, Serializable {
                 new ome.parameters.QueryParameter(
                         "theT", Integer.class, (int) t);
 
-        params.addLong("pid", pid);
+        params.addLong("pixelsId", pid);
         params.add(qpWidth);
         params.add(qpHeight);
         params.add(qpTheZ);
