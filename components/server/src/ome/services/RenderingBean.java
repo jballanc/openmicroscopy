@@ -466,9 +466,7 @@ public class RenderingBean implements RenderingEngine, Serializable {
 
         try {
             final Map<byte[], Integer> overlays = getMasks(pd);
-            if (overlays.size() > 0) {
-                renderer.setOverlays(overlays);
-            }
+            renderer.setOverlays(overlays);
             errorIfInvalidState();
             return renderer.render(pd);
         } catch (IOException e) {
@@ -493,9 +491,7 @@ public class RenderingBean implements RenderingEngine, Serializable {
 
         try {
             final Map<byte[], Integer> overlays = getMasks(pd);
-            if (overlays.size() > 0) {
-                renderer.setOverlays(overlays);
-            }
+            renderer.setOverlays(overlays);
             errorIfInvalidState();
             checkPlaneDef(pd);
             if (resolutionLevel != null)
@@ -525,9 +521,7 @@ public class RenderingBean implements RenderingEngine, Serializable {
 
     	try {
             final Map<byte[], Integer> overlays = getMasks(pd);
-            if (overlays.size() > 0) {
-                renderer.setOverlays(overlays);
-            }
+            renderer.setOverlays(overlays);
     		errorIfInvalidState();
             checkPlaneDef(pd);
             if (resolutionLevel != null)
