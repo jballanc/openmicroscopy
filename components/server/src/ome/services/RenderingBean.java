@@ -552,9 +552,7 @@ public class RenderingBean implements RenderingEngine, Serializable {
         ByteArrayOutputStream byteStream = null;
         try {
             final Map<byte[], Integer> overlays = getMasks(pd);
-            if (overlays.size() > 0) {
-                renderer.setOverlays(overlays);
-            }
+            renderer.setOverlays(overlays);
         	int stride = pd.getStride();
         	if (stride < 0) stride = 0;
         	stride++;
