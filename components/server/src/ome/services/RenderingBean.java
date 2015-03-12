@@ -1975,10 +1975,10 @@ public class RenderingBean implements RenderingEngine, Serializable {
         final long z = pd.getZ();
         final long t = pd.getT();
 
-        List<Long> channelIds = new ArrayList<Long>();
+        List<Integer> channelIds = new ArrayList<Integer>();
         for (int c = 0; c < pixelsObj.getSizeC(); c++) {
             if (rendDefObj.getChannelBinding(c).getActive()) {
-                channelIds.add((long) c);
+                channelIds.add((int) c);
             }
         }
 
@@ -2011,9 +2011,9 @@ public class RenderingBean implements RenderingEngine, Serializable {
                 "and m.height = :height " +
                 "and m.x = 0 " +
                 "and m.y = 0 " +
-                "and m.theZ = :theZ " +
-                "and m.theT = :theT " +
-                "and m.theC in (:channelIds) " +
+                "and m.theZ = :theZ or m.theZ is null " +
+                "and m.theT = :theT or m.theT is null " +
+                "and m.theC in (:channelIds) or m.theC is null " +
                 "and m.id in (:shapeIds) ";
         return (List<IObject>) ex.execute(/*ex*/null/*principal*/,
                 new Executor.SimpleWork(this,"getMaskList")
@@ -2037,10 +2037,10 @@ public class RenderingBean implements RenderingEngine, Serializable {
         final long z = pd.getZ();
         final long t = pd.getT();
 
-        List<Long> channelIds = new ArrayList<Long>();
+        List<Integer> channelIds = new ArrayList<Integer>();
         for (int c = 0; c < pixelsObj.getSizeC(); c++) {
             if (rendDefObj.getChannelBinding(c).getActive()) {
-                channelIds.add((long) c);
+                channelIds.add((int) c);
             }
         }
 
@@ -2073,9 +2073,9 @@ public class RenderingBean implements RenderingEngine, Serializable {
                 "and m.height = :height " +
                 "and m.x = 0 " +
                 "and m.y = 0 " +
-                "and m.theZ = :theZ " +
-                "and m.theT = :theT " +
-                "and m.theC in (:channelIds)";
+                "and m.theZ = :theZ or m.theZ is null " +
+                "and m.theT = :theT or m.theT is null " +
+                "and m.theC in (:channelIds) or m.theC is null";
         return (List<IObject>) ex.execute(/*ex*/null/*principal*/,
                 new Executor.SimpleWork(this,"getMaskList")
         {
