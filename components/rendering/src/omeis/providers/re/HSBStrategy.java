@@ -161,8 +161,8 @@ class HSBStrategy extends RenderingStrategy {
     		{
     			Integer packedColor = overlays.get(overlay);
     			Color color = new Color(packedColor);
-    			colors.add(new int[] { color.getRed(), color.getBlue(),
-    					               color.getGreen(), color.getAlpha() });
+    			colors.add(new int[] { color.getRed(), color.getGreen(),
+    					               color.getBlue(), color.getAlpha() });
     		}
     	}
         return colors;
