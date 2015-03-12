@@ -2011,9 +2011,9 @@ public class RenderingBean implements RenderingEngine, Serializable {
                 "and m.height = :height " +
                 "and m.x = 0 " +
                 "and m.y = 0 " +
-                "and m.theZ = :theZ " +
-                "and m.theT = :theT " +
-                "and m.theC in (:channelIds) " +
+                "and m.theZ is null or m.theZ = :theZ " +
+                "and m.theT is null or m.theT = :theT " +
+                "and m.theC is null or m.theC in (:channelIds) " +
                 "and m.id in (:shapeIds) ";
         return (List<IObject>) ex.execute(/*ex*/null/*principal*/,
                 new Executor.SimpleWork(this,"getMaskList")
@@ -2073,9 +2073,9 @@ public class RenderingBean implements RenderingEngine, Serializable {
                 "and m.height = :height " +
                 "and m.x = 0 " +
                 "and m.y = 0 " +
-                "and m.theZ = :theZ " +
-                "and m.theT = :theT " +
-                "and m.theC in (:channelIds)";
+                "and m.theZ is null or m.theZ = :theZ " +
+                "and m.theT is null or m.theT = :theT " +
+                "and m.theC is null or m.theC in (:channelIds)";
         return (List<IObject>) ex.execute(/*ex*/null/*principal*/,
                 new Executor.SimpleWork(this,"getMaskList")
         {
