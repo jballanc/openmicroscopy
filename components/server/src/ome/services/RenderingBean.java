@@ -2012,9 +2012,9 @@ public class RenderingBean implements RenderingEngine, Serializable {
                 "and m.x = 0 " +
                 "and m.y = 0 " +
                 "and m.theZ = :theZ " +
-                "and m.theT = :theT";// +
-                //" and m.theC in (:channelIds)" +
-                //" and m.id in (:shapeIds)";
+                "and m.theT = :theT " +
+                "and m.theC in (:channelIds) " +
+                "and m.id in (:shapeIds) ";
         return (List<IObject>) ex.execute(/*ex*/null/*principal*/,
                 new Executor.SimpleWork(this,"getMaskList")
         {
@@ -2063,7 +2063,7 @@ public class RenderingBean implements RenderingEngine, Serializable {
         params.add(qpHeight);
         params.add(qpTheZ);
         params.add(qpTheT);
-        //params.addList("channelIds", channelIds);
+        params.addList("channelIds", channelIds);
 
         final String query =
                 "select m from Mask as m " +
@@ -2074,8 +2074,8 @@ public class RenderingBean implements RenderingEngine, Serializable {
                 "and m.x = 0 " +
                 "and m.y = 0 " +
                 "and m.theZ = :theZ " +
-                "and m.theT = :theT"; // +
-                //" and m.theC in (:channelIds)";
+                "and m.theT = :theT " +
+                "and m.theC in (:channelIds)";
         return (List<IObject>) ex.execute(/*ex*/null/*principal*/,
                 new Executor.SimpleWork(this,"getMaskList")
         {
