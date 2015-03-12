@@ -97,6 +97,12 @@ hibernate.dialect=${omero.db.generate_dialect}
                         <!-- Extra space before ';' prevents multiple replacements -->
 			<fileset dir="${resrc.dest}" includes="ddl.sql"/>
 		</replaceregexp>
+		<replaceregexp
+                        match="unique\s(\(.*?\))"
+                        replace="unique \1 ${omero.db.defer}"
+                        flags="gs" byline="true">
+                        <fileset dir="${resrc.dest}" includes="ddl.sql"/>
+                </replaceregexp>
                 <if>
                   <equals arg1="${omero.db.profile}" arg2="oracle10g"/>
                   <then>

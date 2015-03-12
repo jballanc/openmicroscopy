@@ -41,7 +41,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table arc (
@@ -84,7 +84,7 @@
         statsInfo number(19,0),
         pixels_index number(10,0) not null,
         primary key (id),
-        unique (pixels, pixels_index)
+        unique (pixels, pixels_index) deferrable initially deferred
     );
 
     create table channelannotationlink (
@@ -99,7 +99,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table channelbinding (
@@ -124,7 +124,7 @@
         renderingDef number(19,0) not null,
         renderingDef_index number(10,0) not null,
         primary key (id),
-        unique (renderingDef, renderingDef_index)
+        unique (renderingDef, renderingDef_index) deferrable initially deferred
     );
 
     create table checksumalgorithm (
@@ -147,7 +147,7 @@
         renderingDef number(19,0) not null,
         renderingDef_index number(10,0) not null,
         primary key (id),
-        unique (renderingDef, renderingDef_index)
+        unique (renderingDef, renderingDef_index) deferrable initially deferred
     );
 
     create table contrastmethod (
@@ -474,7 +474,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table datasetimagelink (
@@ -489,7 +489,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table dbpatch (
@@ -655,7 +655,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table experimentergroup (
@@ -680,7 +680,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table experimenttype (
@@ -752,7 +752,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table filesetentry (
@@ -769,7 +769,7 @@
         originalFile number(19,0) not null,
         fileset_index number(10,0) not null,
         primary key (id),
-        unique (fileset, fileset_index)
+        unique (fileset, fileset_index) deferrable initially deferred
     );
 
     create table filesetjoblink (
@@ -785,8 +785,8 @@
         parent number(19,0) not null,
         parent_index number(10,0) not null,
         primary key (id),
-        unique (parent, parent_index),
-        unique (parent, child, owner_id)
+        unique (parent, parent_index) deferrable initially deferred,
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table filesetversioninfo (
@@ -858,7 +858,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table filtersetexcitationfilterlink (
@@ -873,7 +873,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table filtertype (
@@ -902,8 +902,8 @@
         parent number(19,0) not null,
         child_index number(10,0) not null,
         primary key (id),
-        unique (parent, child),
-        unique (child, child_index)
+        unique (parent, child) deferrable initially deferred,
+        unique (child, child_index) deferrable initially deferred
     );
 
     create table illumination (
@@ -950,7 +950,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table imagingenvironment (
@@ -1041,7 +1041,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table jobstatus (
@@ -1113,7 +1113,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table lightpathexcitationfilterlink (
@@ -1129,8 +1129,8 @@
         parent number(19,0) not null,
         parent_index number(10,0) not null,
         primary key (id),
-        unique (parent, parent_index),
-        unique (parent, child, owner_id)
+        unique (parent, parent_index) deferrable initially deferred,
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table lightsettings (
@@ -1301,7 +1301,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table node (
@@ -1329,7 +1329,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table objective (
@@ -1405,7 +1405,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table otf (
@@ -1477,7 +1477,7 @@
         relatedTo number(19,0),
         image_index number(10,0) not null,
         primary key (id),
-        unique (image, image_index),
+        unique (image, image_index) deferrable initially deferred,
         check (significantBits > 0 and sizeX > 0 and sizeY > 0 and sizeZ > 0 and sizeC > 0 and sizeT > 0)
     );
 
@@ -1493,7 +1493,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table pixelsoriginalfilemap (
@@ -1508,7 +1508,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table pixelstype (
@@ -1554,7 +1554,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table planeslicingcontext (
@@ -1620,7 +1620,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table plateannotationlink (
@@ -1635,7 +1635,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table project (
@@ -1664,7 +1664,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table projectdatasetlink (
@@ -1679,7 +1679,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table pulse (
@@ -1733,7 +1733,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table renderingdef (
@@ -1798,7 +1798,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table screen (
@@ -1832,7 +1832,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table screenplatelink (
@@ -1847,7 +1847,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table scriptjob (
@@ -1886,7 +1886,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table shape (
@@ -1948,7 +1948,7 @@
         pixels number(19,0),
         roi_index number(10,0) not null,
         primary key (id),
-        unique (roi, roi_index)
+        unique (roi, roi_index) deferrable initially deferred
     );
 
     create table share_ (
@@ -1968,7 +1968,7 @@
         external_id number(19,0) unique,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child)
+        unique (parent, child) deferrable initially deferred
     );
 
     create table stagelabel (
@@ -2082,7 +2082,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table wellreagentlink (
@@ -2097,7 +2097,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     create table wellsample (
@@ -2117,7 +2117,7 @@
         well number(19,0) not null,
         well_index number(10,0) not null,
         primary key (id),
-        unique (well, well_index)
+        unique (well, well_index) deferrable initially deferred
     );
 
     create table wellsampleannotationlink (
@@ -2132,7 +2132,7 @@
         update_id number(19,0) not null,
         parent number(19,0) not null,
         primary key (id),
-        unique (parent, child, owner_id)
+        unique (parent, child, owner_id) deferrable initially deferred
     );
 
     alter table acquisitionmode 
