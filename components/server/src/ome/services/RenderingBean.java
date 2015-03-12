@@ -1981,18 +1981,14 @@ public class RenderingBean implements RenderingEngine, Serializable {
         }
 
         final Parameters params = new Parameters();
-        ome.parameters.QueryParameter qpWidth =
-                new ome.parameters.QueryParameter(
-                        "width", Double.class, width);
-        ome.parameters.QueryParameter qpHeight =
-                new ome.parameters.QueryParameter(
-                        "height", Double.class, height);
-        ome.parameters.QueryParameter qpTheZ =
-                new ome.parameters.QueryParameter(
-                        "theZ", Integer.class, (int) z);
-        ome.parameters.QueryParameter qpTheT =
-                new ome.parameters.QueryParameter(
-                        "theT", Integer.class, (int) t);
+        QueryParameter qpWidth = new QueryParameter(
+                "width", Double.class, width);
+        QueryParameter qpHeight = new QueryParameter(
+                "height", Double.class, height);
+        QueryParameter qpTheZ = new QueryParameter(
+                "theZ", Integer.class, (int) z);
+        QueryParameter qpTheT = new QueryParameter(
+                "theT", Integer.class, (int) t);
 
         params.addLong("pixelsId", pid);
         params.add(qpWidth);
