@@ -2283,7 +2283,7 @@ create index originalfile_repo_index on originalfile (repo);
 -- create an extra `reponame` column that will be populated with a new UUID-tagged string
 -- for each item in the local repo (i.e. where `repo` is null).
 alter table originalfile add (reponame varchar(42) not null);
-create unique index originalfile_unique_path on originalfile (reponame, path, name);
+alter table originalfile add constraint originalfile_unique_path unique (reponame, path, name) deferrable initially deferred;
 
 CREATE OR REPLACE TRIGGER unique_repo_path
 BEFORE INSERT OR UPDATE ON originalfile
