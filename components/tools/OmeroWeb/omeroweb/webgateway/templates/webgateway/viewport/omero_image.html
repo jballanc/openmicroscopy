@@ -949,6 +949,10 @@
                   });
     return false;
   }
+  function onRenderMasksChanged(input) {
+     viewport.loadedImg.current.renderMasks = input.checked;
+     viewport.load(viewport.loadedImg.id);
+  }
 
 {% if image.canAnnotate %}
   function resetImageDefaults (obj) {
@@ -1216,6 +1220,8 @@
                 {% ifnotequal roiCount 0 %}
                     <a href="#" onclick="show_rois(); return false;">Show ROIs</a> |
                     <a href="#" onclick="hide_rois(); return false;">Hide</a>
+                    <br />
+                    <input type="checkbox" name="render_masks" onchange="onRenderMasksChanged(this);">Render Masks?</input>
                 {% endifnotequal %}
           </div>
 {% endblock roi_buttons %}

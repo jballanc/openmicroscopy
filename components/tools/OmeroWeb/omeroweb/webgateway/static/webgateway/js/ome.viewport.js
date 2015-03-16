@@ -63,6 +63,7 @@ var Metadata = function () {
 	  this.size.z = t;
       }
     this.current.zoom = 100;
+    this.current.renderMasks = false;
   };
   
   this.hasSameSettings = function (other) {
@@ -1002,6 +1003,10 @@ jQuery._WeblitzViewport = function (container, server, options) {
     }
     if (this.loadedImg.current.query.debug !== undefined) {
       query.push('debug='+this.loadedImg.current.query.debug);
+    }
+    /* Render masks? */
+    if (this.loadedImg.current.renderMasks) {
+       query.push('render_masks=1');
     }
     return query.join('&');
   };
