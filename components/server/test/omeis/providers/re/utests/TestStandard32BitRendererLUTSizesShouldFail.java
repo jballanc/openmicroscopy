@@ -8,6 +8,8 @@ package omeis.providers.re.utests;
 
 import ome.model.enums.PixelsType;
 import omeis.providers.re.data.PlaneDef;
+import omeis.providers.re.quantum.Quantization_32_bit;
+import omeis.providers.re.quantum.QuantumFactory;
 import omeis.providers.re.quantum.QuantumStrategy;
 
 import org.perf4j.LoggingStopWatch;
@@ -16,6 +18,14 @@ import org.testng.annotations.Test;
 
 public class TestStandard32BitRendererLUTSizesShouldFail extends BaseRenderingTest
 {
+    @Override
+    protected QuantumFactory createQuantumFactory()
+    {
+        TestQuantumFactory qf = new TestQuantumFactory();
+        qf.setStrategy(new Quantization_32_bit(settings.getQuantization(),
+                pixels));
+        return qf;
+    }
 
     @Override
     protected int getSizeX()
@@ -53,6 +63,7 @@ public class TestStandard32BitRendererLUTSizesShouldFail extends BaseRenderingTe
     {
         PixelsType pixelsType = new PixelsType();
         pixelsType.setValue("uint32");
+        pixelsType.setBitSize(32);
         return pixelsType;
     }
 
@@ -60,7 +71,7 @@ public class TestStandard32BitRendererLUTSizesShouldFail extends BaseRenderingTe
     public void testPixelValues() throws Exception
     {
         QuantumStrategy qs = quantumFactory.getStrategy(
-                settings.getQuantization(), pixels.getPixelsType());
+                settings.getQuantization(), pixels);
         int n = data.size();
         for (int i = 0; i < n/2; i++) {
             assertEquals(0.0, data.getPixelValue(i));
@@ -80,7 +91,7 @@ public class TestStandard32BitRendererLUTSizesShouldFail extends BaseRenderingTe
     public void testPixelValuesRange() throws Exception
     {
         QuantumStrategy qs = quantumFactory.getStrategy(
-                settings.getQuantization(), pixels.getPixelsType());
+                settings.getQuantization(), pixels);
         assertEquals(0.0, qs.getPixelsTypeMin());
         assertEquals(Math.pow(2, 32)-1, qs.getPixelsTypeMax());
     }

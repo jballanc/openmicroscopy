@@ -62,6 +62,7 @@ public class ImportContainer
     private String userSpecifiedName;
     private String userSpecifiedDescription;
     private boolean doThumbnails = true;
+    private boolean noStatsInfo = false;
     private List<Annotation> customAnnotationList;
     private IObject target;
     private String checksumAlgorithm;
@@ -89,7 +90,7 @@ public class ImportContainer
     /**
      * Retrieves whether or not we are performing thumbnail creation upon
      * import completion.
-     * return <code>true</code> if we are to perform thumbnail creation and
+     * @return <code>true</code> if we are to perform thumbnail creation and
      * <code>false</code> otherwise.
      * @since OMERO Beta 4.3.0.
      */
@@ -105,9 +106,32 @@ public class ImportContainer
      * <code>false</code> otherwise.
      * @since OMERO Beta 4.3.0.
      */
+
     public void setDoThumbnails(boolean v)
     {
         doThumbnails = v;
+    }
+
+    /**
+     * Retrieves whether or not we disabling <codeStatsInfo</code> population.
+     * @returns <code>true</code> if we are to disable <code>StatsInfo</code>
+     * population. <code>false</code> otherwise.
+     * @since OMERO 5.1.
+     */
+    public boolean getNoStatsInfo()
+    {
+        return noStatsInfo;
+    }
+
+    /**
+     * Sets whether or not we disabling <codeStatsInfo</code> population.
+     * @param v <code>true</code> if we are to disable <code>StatsInfo</code>
+     * population. <code>false</code> otherwise.
+     * @since OMERO 5.1.
+     */
+    public void setNoStatsInfo(boolean v)
+    {
+        noStatsInfo = v;
     }
 
     /**
@@ -301,6 +325,7 @@ public class ImportContainer
         // TODO: These should possible be a separate option like
         // ImportUserSettings rather than mis-using ImportContainer.
         settings.doThumbnails = rbool(getDoThumbnails());
+        settings.noStatsInfo = rbool(getNoStatsInfo());
         settings.userSpecifiedTarget = getTarget();
         settings.userSpecifiedName = getUserSpecifiedName() == null ? null
                 : rstring(getUserSpecifiedName());
