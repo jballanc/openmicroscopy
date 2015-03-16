@@ -39,7 +39,7 @@ public class TestStandardFloatRenderer extends BaseRenderingTest
     {
         TestQuantumFactory qf = new TestQuantumFactory();
         qf.setStrategy(new Quantization_float(settings.getQuantization(),
-                pixels.getPixelsType()));
+                pixels));
         return qf;
     }
     
@@ -85,6 +85,7 @@ public class TestStandardFloatRenderer extends BaseRenderingTest
     {
         PixelsType pixelsType = new PixelsType();
         pixelsType.setValue("float");
+        pixelsType.setBitSize(32);
         return pixelsType;
     }
 
@@ -92,7 +93,7 @@ public class TestStandardFloatRenderer extends BaseRenderingTest
     public void testPixelValues() throws Exception
     {
         QuantumStrategy qs = quantumFactory.getStrategy(
-                settings.getQuantization(), pixels.getPixelsType());
+                settings.getQuantization(), pixels);
         int n = data.size();
         for (int i = 0; i < n/2; i++) {
             assertEquals(0.0, data.getPixelValue(i));
@@ -113,7 +114,7 @@ public class TestStandardFloatRenderer extends BaseRenderingTest
     public void testPixelValuesRange() throws Exception
     {
         QuantumStrategy qs = quantumFactory.getStrategy(
-                settings.getQuantization(), pixels.getPixelsType());
+                settings.getQuantization(), pixels);
         assertTrue(-Float.MAX_VALUE == qs.getPixelsTypeMin());
         assertTrue(Float.MAX_VALUE == qs.getPixelsTypeMax());
     }
