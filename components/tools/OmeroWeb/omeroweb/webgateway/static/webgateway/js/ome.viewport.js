@@ -63,7 +63,6 @@ var Metadata = function () {
 	  this.size.z = t;
       }
     this.current.zoom = 100;
-    this.current.renderMasks = false;
   };
   
   this.hasSameSettings = function (other) {
