@@ -951,7 +951,7 @@
   }
   function onRenderMasksChanged(input) {
      viewport.loadedImg.current.renderMasks = input.checked;
-     viewport.load(viewport.loadedImg.id);
+     viewport.update();
   }
 
 {% if image.canAnnotate %}

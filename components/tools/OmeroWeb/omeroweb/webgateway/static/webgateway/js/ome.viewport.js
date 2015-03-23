@@ -192,6 +192,10 @@ jQuery._WeblitzViewport = function (container, server, options) {
       }
   };
 
+  this.update = function() {
+    _load();
+  };
+
   var after_img_load_cb = function (callback) {
     hideLoading();
     _this.viewportimg.show();
