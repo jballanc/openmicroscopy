@@ -276,6 +276,7 @@ class ValueResolver(object):
                                 (value, [o[1] for o in row]))
             plate_row = m.group(1).lower()
             plate_column = str(long(m.group(2)))
+            wells_by_location = None
             if len(self.wells_by_location) == 1:
                 wells_by_location = self.wells_by_location.values()[0]
                 log.debug('Parsed "%s" row: %s column: %s' % \
@@ -287,6 +288,10 @@ class ValueResolver(object):
                         log.debug('Parsed "%s" row: %s column: %s plate: %s' % \
                                 (value, plate_row, plate_column, plate))
                         break
+            if wells_by_location is None:
+                raise MetadataError(
+                    'Unable to locate Plate column in Row: %r' % row
+                )
             try:
                 return wells_by_location[plate_row][plate_column].id.val
             except KeyError:
@@ -417,16 +422,19 @@ class ParsingContext(object):
                     plate = self.value_resolver.target_object.id.val
                 elif ScreenI is self.value_resolver.target_class:
                     plate = columns_by_name['Plate'].values[i]
+                v = ''
                 try:
                     well = self.value_resolver.wells_by_id[plate]
                     well = well[well_column.values[i]]
                     row = well.row.val
                     col = well.column.val
+                    row = self.value_resolver.AS_ALPHA[row]
+                    v = '%s%d' % (row, col + 1)
                 except KeyError:
-                    log.error('Missing row or column for well name population!')
-                    raise
-                row = self.value_resolver.AS_ALPHA[row]
-                v = '%s%d' % (row, col + 1)
+                    log.warn(
+                        'Skipping table row %d! Missing well row or column '
+                        'for well name population!' % i, exc_info=True
+                    )
                 well_name_column.size = max(well_name_column.size, len(v))
                 well_name_column.values.append(v)
             else:
