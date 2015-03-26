@@ -447,6 +447,7 @@
 
             {% if manager.well %}
                 var wellId = {{manager.well.id}};
+                var imageId = {{manager.well.getWellSample.image.id}};
                 var onAnnotations = function(result) {
                     if (result.data && result.data.rows) {
                         var table = $("#bulk_annotations").show().empty();
@@ -463,6 +464,14 @@
                         }
                     }
                 };
+                $.getJSON('{% url 'webgateway_object_table_query' 'Plate.wells.wellSamples.image' 999 %}'.replace('999', imageId) +
+                    '?query=Image-' + imageId +
+                    '&callback=?',
+                     onAnnotations);
+                $.getJSON('{% url 'webgateway_object_table_query' 'Screen.plateLinks.child.wells.wells.wellSamples.image' 999 %}'.replace('999', imageId) +
+                    '?query=Image-' + imageId +
+                    '&callback=?',
+                     onAnnotations);
                 $.getJSON('{% url 'webgateway_object_table_query' 'Plate.wells' 999 %}'.replace('999', wellId) +
                     '?query=Well-' + wellId +
                     '&callback=?',
