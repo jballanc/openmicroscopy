@@ -192,6 +192,10 @@ jQuery._WeblitzViewport = function (container, server, options) {
       }
   };
 
+  this.update = function() {
+    _load();
+  };
+
   var after_img_load_cb = function (callback) {
     hideLoading();
     _this.viewportimg.show();
@@ -1002,6 +1006,10 @@ jQuery._WeblitzViewport = function (container, server, options) {
     }
     if (this.loadedImg.current.query.debug !== undefined) {
       query.push('debug='+this.loadedImg.current.query.debug);
+    }
+    /* Render masks? */
+    if (this.loadedImg.current.renderMasks) {
+       query.push('render_masks=1');
     }
     return query.join('&');
   };

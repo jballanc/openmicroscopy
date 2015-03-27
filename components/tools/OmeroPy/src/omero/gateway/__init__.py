@@ -6929,7 +6929,7 @@ class _ImageWrapper (BlitzObjectWrapper):
 
 
     @assert_re()
-    def renderJpeg (self, z=None, t=None, compression=0.9):
+    def renderJpeg (self, z=None, t=None, compression=0.9, render_masks=False):
         """
         Return the data from rendering image, compressed (and projected).
         Projection (or not) is specified by calling L{setProjection} before renderJpeg.
@@ -6940,6 +6940,8 @@ class _ImageWrapper (BlitzObjectWrapper):
         :type compression:      Float
         """
 
+        if render_masks:
+            self._pd = omero.romio.PlaneDefWithMasks(self._pd.slice)
         if z is None:
             z = self._re.getDefaultZ()
         self._pd.z = long(z)

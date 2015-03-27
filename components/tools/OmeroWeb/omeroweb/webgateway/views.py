@@ -756,11 +756,15 @@ def render_image (request, iid, z=None, t=None, conn=None, **kwargs):
         raise Http404
     img, compress_quality = pi
     jpeg_data = webgateway_cache.getImage(request, server_id, img, z, t)
-    if jpeg_data is None:
-        jpeg_data = img.renderJpeg(z,t, compression=compress_quality)
+    render_masks = request.REQUEST.get('render_masks', '0') == '1'
+    if jpeg_data is None or render_masks:
+        jpeg_data = img.renderJpeg(
+            z,t, compression=compress_quality, render_masks=render_masks
+        )
         if jpeg_data is None:
             raise Http404
-        webgateway_cache.setImage(request, server_id, img, z, t, jpeg_data)
+        if not render_masks:
+            webgateway_cache.setImage(request, server_id, img, z, t, jpeg_data)
 
     format = request.REQUEST.get('format', 'jpeg')
     rsp = HttpResponse(jpeg_data, content_type='image/jpeg')
