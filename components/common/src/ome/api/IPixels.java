@@ -13,6 +13,7 @@ package ome.api;
 
 // Application-internal dependencies
 import java.util.List;
+import java.util.Map;
 
 import ome.annotations.Validate;
 import ome.model.IObject;
@@ -301,5 +302,12 @@ public interface IPixels extends ServiceInterface
      */
     public <T extends IObject> List<T> getAllEnumerations(Class<T> klass);
     
+    /**
+     * Retrieves the map of properties for a given Pixel set.
+     * 
+     * @param pixelsId The source Pixels set id.
+     * @return Map of parameter names as Strings and their String values.
+     */
+    public Map<String, String> getPixelsParams(long pixelsId);
 	
 }

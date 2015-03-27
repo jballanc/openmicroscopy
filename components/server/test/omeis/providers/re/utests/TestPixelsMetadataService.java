@@ -8,6 +8,7 @@ package omeis.providers.re.utests;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import ome.api.IPixels;
 import ome.model.IObject;
@@ -78,6 +79,11 @@ public class TestPixelsMetadataService implements IPixels {
 	}
 
 	public <T extends IObject> T getEnumeration(Class<T> arg0, String arg1) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	public Map<String, String> getPixelsParams(long imageId) {
 		// TODO Auto-generated method stub
 		return null;
 	}
