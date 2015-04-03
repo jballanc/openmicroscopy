@@ -29,23 +29,88 @@
 
 import pytest
 
+from omero.model import ImageI, PixelsI, FilesetI, FilesetEntryI, \
+    OriginalFileI, DimensionOrderI, PixelsTypeI
+from omero.rtypes import rstring, rlong, rint, rtime
+from uuid import uuid4
+
+
+def uuid():
+    return str(uuid4())
+
+
+@pytest.fixture()
+def image_with_fileset(request, gatewaywrapper):
+    """Creates and returns an Image with associated Fileset."""
+    gatewaywrapper.loginAsAuthor()
+    update_service = gatewaywrapper.gateway.getUpdateService()
+    image = ImageI()
+    image.name = rstring(uuid())
+    image.acquisitionDate = rtime(0)
+    pixels = PixelsI()
+    pixels.sha1 = rstring('')
+    pixels.sizeX = rint(1)
+    pixels.sizeY = rint(1)
+    pixels.sizeZ = rint(1)
+    pixels.sizeC = rint(1)
+    pixels.sizeT = rint(1)
+    pixels.dimensionOrder = DimensionOrderI(1L, False)  # XYZCT
+    pixels.pixelsType = PixelsTypeI(1L, False)  # bit
+    fileset = FilesetI()
+    fileset.templatePrefix = rstring('')
+    for index in range(2):
+        fileset_entry = FilesetEntryI()
+        fileset_entry.clientPath = rstring(
+            '/client/path/filename_%d.ext' % index
+        )
+        original_file = OriginalFileI()
+        original_file.name = rstring('filename_%d.ext' % index)
+        original_file.path = rstring('/server/path/')
+        original_file.size = rlong(50L)
+        fileset_entry.originalFile = original_file
+        fileset.addFilesetEntry(fileset_entry)
+    image.addPixels(pixels)
+    image.fileset = fileset
+    image = update_service.saveAndReturnObject(image)
+    return gatewaywrapper.gateway.getObject('Image', image.id.val)
+
 
 class TestFileset(object):
 
-    @pytest.fixture(autouse=True)
-    def setUp(self, gatewaywrapper):
-        gatewaywrapper.loginAsAuthor()
-        self.TESTIMG = gatewaywrapper.getTestImage()
+    def assert_files(self, files):
+        assert len(files) == 2
+        for index, original_file in enumerate(files):
+            assert original_file.name == 'filename_%d.ext' % index
 
-    @pytest.mark.xfail(reason="ticket 11610")
-    def testFileset(self):
-        image = self.TESTIMG
+    def testCountArchivedFiles(self, gatewaywrapper, image_with_fileset):
+        assert image_with_fileset.countArchivedFiles() == 0
 
-        # Assume image is not imported pre-FS
-        filesCount = image.countFilesetFiles()
-        assert filesCount > 0, \
-            "Imported image should be linked to original files"
+    def testCountFilesetFiles(self, gatewaywrapper, image_with_fileset):
+        assert image_with_fileset.countFilesetFiles() == 2
 
-        # List the 'imported image files' (from fileset), check the number
-        filesInFileset = list(image.getImportedImageFiles())
-        assert filesCount == len(filesInFileset)
+    def testCountImportedImageFiles(self, gatewaywrapper, image_with_fileset):
+        assert image_with_fileset.countImportedImageFiles() == 2
+
+    def testGetImportedFilesInfo(self, gatewaywrapper, image_with_fileset):
+        assert image_with_fileset.getImportedFilesInfo() == {
+            'count': 2, 'size': 100
+        }
+
+    def testGetArchivedFiles(self, gatewaywrapper, image_with_fileset):
+        self.assert_files(list(image_with_fileset.getArchivedFiles()))
+
+    def testGetImportedImageFiles(self, gatewaywrapper, image_with_fileset):
+        self.assert_files(list(image_with_fileset.getImportedImageFiles()))
+
+    def testGetArchivedFilesInfo(self, gatewaywrapper, image_with_fileset):
+        gw = gatewaywrapper.gateway
+        files_info = gw.getArchivedFilesInfo([image_with_fileset.id])
+        assert files_info == {'count': 0, 'size': 0}
+
+    def testGetFilesetFilesInfo(self, gatewaywrapper, image_with_fileset):
+        gw = gatewaywrapper.gateway
+        files_info = gw.getFilesetFilesInfo([image_with_fileset.id])
+        assert files_info == {'count': 2, 'size': 100}
+
+    def testGetFileset(self, gatewaywrapper, image_with_fileset):
+        assert image_with_fileset.getFileset() is not None
