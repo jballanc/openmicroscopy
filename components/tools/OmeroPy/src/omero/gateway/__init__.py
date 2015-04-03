@@ -2508,6 +2508,8 @@ class _BlitzGateway (object):
                 ')'
         queryService = self.getQueryService()
         count, size = queryService.projection(query, params, self.SERVICE_OPTS)[0]
+        if size is None:
+            size = 0
         return {'count': unwrap(count), 'size': unwrap(size)}
 
     def getArchivedFilesInfo (self, imageIds):
