@@ -1937,13 +1937,12 @@ def original_file_paths(request, iid, conn=None, **kwargs):
         logger.debug("Cannot get original file paths becuase Image does not exist.")
         return HttpResponseServerError("Cannot get original file paths becuase Image does not exist (id:%s)." % (iid))
 
-    files = list(image.getImportedImageFiles())
+    paths = list(image.getImportedImageFilePaths())
 
-    if len(files) == 0:
+    if len(paths) == 0:
         return HttpResponseServerError("This image has no Original Files.")
 
-    fileNames = [ f.getPath() + f.getName() for f in files]
-    return fileNames
+    return paths
 
 
 @login_required()
