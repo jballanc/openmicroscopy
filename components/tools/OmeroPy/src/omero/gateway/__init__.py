@@ -2496,19 +2496,19 @@ class _BlitzGateway (object):
         :param imageIds:    Image IDs list
         :return:            Dict of files 'count' and 'size'
         """
-
         params = omero.sys.ParametersI()
         params.addIds(imageIds)
-        query = "select distinct(fse) from FilesetEntry as fse "\
-                "left outer join fse.fileset as fs "\
-                "left outer join fetch fse.originalFile as f "\
-                "left outer join fs.images as image where image.id in (:ids)"
+        query = 'select count(fse), sum(fse.originalFile.size) '\
+                'from FilesetEntry as fse where fse.id in ('\
+                '   select distinct(i_fse.id) from FilesetEntry as i_fse '\
+                '   join i_fse.fileset as i_fileset'\
+                '   join i_fse.originalFile '\
+                '   join i_fileset.images as i_image '\
+                '   where i_image.id in (:ids)'\
+                ')'
         queryService = self.getQueryService()
-        fsinfo = queryService.findAllByQuery(query, params, self.SERVICE_OPTS)
-        fsCount = len(fsinfo)
-        fsSize = sum([f.originalFile.getSize().val for f in fsinfo])
-        filesetFileInfo = {'count': fsCount, 'size': fsSize}
-        return filesetFileInfo
+        count, size = queryService.projection(query, params, self.SERVICE_OPTS)[0]
+        return {'count': unwrap(count), 'size': unwrap(size)}
 
     def getArchivedFilesInfo (self, imageIds):
         """
