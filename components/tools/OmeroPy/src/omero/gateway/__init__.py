@@ -7769,6 +7769,41 @@ class _ImageWrapper (BlitzObjectWrapper):
         for original_file in original_files:
             yield OriginalFileWrapper(self._conn, original_file)
 
+    def getImportedImageFilePaths (self):
+        """
+        Returns a generator of path strings corresponding to the Imported
+        image files that created this image, if available.
+        """
+        query_service = self._conn.getQueryService()
+
+        # If we have an FS image, return Fileset files.
+        params = omero.sys.ParametersI()
+        params.addId(self.getId())
+        query = 'select ofile.path, ofile.name from FilesetEntry as fse '\
+                'join fse.fileset as fileset '\
+                'join fse.originalFile as ofile '\
+                'join fileset.images as image '\
+                'where image.id in (:id)'
+        rows = query_service.projection(
+            query, params, self._conn.SERVICE_OPTS
+        )
+
+        if len(rows) == 0:
+            # Otherwise, return Original Archived Files
+            params = omero.sys.ParametersI()
+            params.addId(self.getPixelsId())
+            query = 'select ofile.path, ofile.name '\
+                    '    from PixelsOriginalFileMap as link '\
+                    'join link.parent as ofile ' \
+                    'where link.child.id = :id'
+            rows = query_service.projection(
+                query, params, self._conn.SERVICE_OPTS
+            )
+
+        for row in rows:
+            path, name = row
+            yield '%s%s' % (unwrap(path), unwrap(name))
+
     def getFileset (self):
         """
         Returns the Fileset linked to this Image.
