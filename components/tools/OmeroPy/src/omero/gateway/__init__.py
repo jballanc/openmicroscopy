@@ -4934,7 +4934,7 @@ _
             params = omero.sys.Parameters()
             params.map = {}
             params.map['pid'] = omero_type(self.getId())
-            query = "select max(row), max(column) from Well"\
+            query = "select max(row), max(column) from Well "\
                     "where plate.id = :pid"
             res = q.projection(query, params, self._conn.SERVICE_OPTS)
             (row, col) = res[0]
