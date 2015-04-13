@@ -29,23 +29,212 @@
 
 import pytest
 
+from omero.model import ImageI, PixelsI, FilesetI, FilesetEntryI, \
+    OriginalFileI, DimensionOrderI, PixelsTypeI
+from omero.rtypes import rstring, rlong, rint, rtime
+from uuid import uuid4
+
+
+def uuid():
+    return str(uuid4())
+
+
+def create_image(image_index):
+    image = ImageI()
+    image.name = rstring('%s_%d' % (uuid(), image_index))
+    image.acquisitionDate = rtime(0)
+    pixels = PixelsI()
+    pixels.sha1 = rstring('')
+    pixels.sizeX = rint(1)
+    pixels.sizeY = rint(1)
+    pixels.sizeZ = rint(1)
+    pixels.sizeC = rint(1)
+    pixels.sizeT = rint(1)
+    pixels.dimensionOrder = DimensionOrderI(1L, False)  # XYZCT
+    pixels.pixelsType = PixelsTypeI(1L, False)  # bit
+    image.addPixels(pixels)
+    return image
+
+
+@pytest.fixture()
+def images_with_original_files(request, gatewaywrapper):
+    """Creates Images with associated OriginalFiles."""
+    gatewaywrapper.loginAsAuthor()
+    gw = gatewaywrapper.gateway
+    update_service = gw.getUpdateService()
+    original_files = list()
+    for original_file_index in range(2):
+        original_file = OriginalFileI()
+        original_file.name = rstring(
+            'filename_%d.ext' % original_file_index
+        )
+        original_file.path = rstring('/server/path/')
+        original_file.size = rlong(50L)
+        original_files.append(original_file)
+    images = list()
+    for image_index in range(2):
+        image = create_image(image_index)
+        for original_file in original_files:
+            image.getPrimaryPixels().linkOriginalFile(original_file)
+        images.append(image)
+    image_ids = update_service.saveAndReturnIds(images)
+    return [gw.getObject('Image', image_id) for image_id in image_ids]
+
+
+@pytest.fixture()
+def fileset_with_images(request, gatewaywrapper):
+    """Creates and returns a Fileset with associated Images."""
+    gatewaywrapper.loginAsAuthor()
+    update_service = gatewaywrapper.gateway.getUpdateService()
+    fileset = FilesetI()
+    fileset.templatePrefix = rstring('')
+    for image_index in range(2):
+        image = create_image(image_index)
+        for fileset_index in range(2):
+            fileset_entry = FilesetEntryI()
+            fileset_entry.clientPath = rstring(
+                '/client/path/filename_%d.ext' % fileset_index
+            )
+            original_file = OriginalFileI()
+            original_file.name = rstring('filename_%d.ext' % fileset_index)
+            original_file.path = rstring('/server/path/')
+            original_file.size = rlong(50L)
+            fileset_entry.originalFile = original_file
+            fileset.addFilesetEntry(fileset_entry)
+        fileset.addImage(image)
+    fileset = update_service.saveAndReturnObject(fileset)
+    return gatewaywrapper.gateway.getObject('Fileset', fileset.id.val)
+
 
 class TestFileset(object):
 
-    @pytest.fixture(autouse=True)
-    def setUp(self, gatewaywrapper):
-        gatewaywrapper.loginAsAuthor()
-        self.TESTIMG = gatewaywrapper.getTestImage()
+    def testCountArchivedFiles(self, gatewaywrapper, fileset_with_images):
+        for image in fileset_with_images.copyImages():
+            assert image.countArchivedFiles() == 0
 
-    @pytest.mark.xfail(reason="ticket 11610")
-    def testFileset(self):
-        image = self.TESTIMG
+    def testCountFilesetFiles(self, gatewaywrapper, fileset_with_images):
+        for image in fileset_with_images.copyImages():
+            assert image.countFilesetFiles() == 4
 
-        # Assume image is not imported pre-FS
-        filesCount = image.countFilesetFiles()
-        assert filesCount > 0, \
-            "Imported image should be linked to original files"
+    def testCountImportedImageFiles(self, gatewaywrapper, fileset_with_images):
+        for image in fileset_with_images.copyImages():
+            assert image.countImportedImageFiles() == 4
 
-        # List the 'imported image files' (from fileset), check the number
-        filesInFileset = list(image.getImportedImageFiles())
-        assert filesCount == len(filesInFileset)
+    def testGetImportedFilesInfo(self, gatewaywrapper, fileset_with_images):
+        for image in fileset_with_images.copyImages():
+            assert image.getImportedFilesInfo() == {
+                'count': 4, 'size': 200
+            }
+
+    def testGetArchivedFiles(self, gatewaywrapper, fileset_with_images):
+        for image in fileset_with_images.copyImages():
+            len(list(image.getArchivedFiles())) == 4
+
+    def testGetImportedImageFiles(self, gatewaywrapper, fileset_with_images):
+        for image in fileset_with_images.copyImages():
+            len(list(image.getImportedImageFiles())) == 4
+
+    def testGetArchivedFilesInfo(self, gatewaywrapper, fileset_with_images):
+        gw = gatewaywrapper.gateway
+        for image in fileset_with_images.copyImages():
+            files_info = gw.getArchivedFilesInfo([image.id])
+            assert files_info == {'count': 0, 'size': 0}
+
+    def testGetFilesetFilesInfo(self, gatewaywrapper, fileset_with_images):
+        gw = gatewaywrapper.gateway
+        for image in fileset_with_images.copyImages():
+            files_info = gw.getFilesetFilesInfo([image.id])
+            assert files_info == {'count': 4, 'size': 200}
+
+    def testGetFilesetFilesInfoMultiple(
+            self, gatewaywrapper, fileset_with_images):
+        gw = gatewaywrapper.gateway
+        image_ids = [v.id for v in fileset_with_images.copyImages()]
+        files_info = gw.getFilesetFilesInfo(image_ids)
+        assert files_info == {'count': 4, 'size': 200}
+
+    def testGetFileset(self, gatewaywrapper, fileset_with_images):
+        for image in fileset_with_images.copyImages():
+            assert image.getFileset() is not None
+
+    def testGetImportedImageFilePaths(
+            self, gatewaywrapper, fileset_with_images):
+        for image in fileset_with_images.copyImages():
+            paths = list(image.getImportedImageFilePaths())
+            paths.sort()
+            assert paths == [
+                '/server/path/filename_0.ext',
+                '/server/path/filename_0.ext',
+                '/server/path/filename_1.ext',
+                '/server/path/filename_1.ext'
+            ]
+
+
+class TestArchivedOriginalFiles(object):
+
+    def testCountArchivedFiles(
+            self, gatewaywrapper, images_with_original_files):
+        for image in images_with_original_files:
+            assert image.countArchivedFiles() == 2
+
+    def testCountFilesetFiles(
+            self, gatewaywrapper, images_with_original_files):
+        for image in images_with_original_files:
+            assert image.countFilesetFiles() == 0
+
+    def testCountImportedImageFiles(
+            self, gatewaywrapper, images_with_original_files):
+        for image in images_with_original_files:
+            assert image.countImportedImageFiles() == 2
+
+    def testGetImportedFilesInfo(
+            self, gatewaywrapper, images_with_original_files):
+        for image in images_with_original_files:
+            assert image.getImportedFilesInfo() == {
+                'count': 2, 'size': 100
+            }
+
+    def testGetArchivedFiles(
+            self, gatewaywrapper, images_with_original_files):
+        for image in images_with_original_files:
+            len(list(image.getArchivedFiles())) == 2
+
+    def testGetImportedImageFiles(
+            self, gatewaywrapper, images_with_original_files):
+        for image in images_with_original_files:
+            len(list(image.getImportedImageFiles())) == 2
+
+    def testGetArchivedFilesInfo(
+            self, gatewaywrapper, images_with_original_files):
+        gw = gatewaywrapper.gateway
+        for image in images_with_original_files:
+            files_info = gw.getArchivedFilesInfo([image.id])
+            assert files_info == {'count': 2, 'size': 100}
+
+    def testGetFilesetFilesInfo(
+            self, gatewaywrapper, images_with_original_files):
+        gw = gatewaywrapper.gateway
+        for image in images_with_original_files:
+            files_info = gw.getFilesetFilesInfo([image.id])
+            assert files_info == {'count': 0, 'size': 0}
+
+    def testGetFilesetFilesInfoMultiple(
+            self, gatewaywrapper, images_with_original_files):
+        gw = gatewaywrapper.gateway
+        image_ids = [v.id for v in images_with_original_files]
+        files_info = gw.getFilesetFilesInfo(image_ids)
+        assert files_info == {'count': 0, 'size': 0}
+
+    def testGetFileset(self, gatewaywrapper, images_with_original_files):
+        for image in images_with_original_files:
+            assert image.getFileset() is None
+
+    def testGetImportedImageFilePaths(
+            self, gatewaywrapper, images_with_original_files):
+        for image in images_with_original_files:
+            paths = list(image.getImportedImageFilePaths())
+            paths.sort()
+            assert paths == [
+                '/server/path/filename_0.ext',
+                '/server/path/filename_1.ext',
+            ]
