@@ -318,6 +318,14 @@
                 }
             }
         };
+        $.getJSON('{% url 'webgateway_object_table_query' 'Plate.wells.wellSamples.image' 999 %}'.replace('999', tmp.imageId) +
+            '?query=Image-' + tmp.imageId +
+            '&callback=?',
+             onAnnotations);
+        $.getJSON('{% url 'webgateway_object_table_query' 'Screen.plateLinks.child.wells.wellSamples.image' 999 %}'.replace('999', tmp.imageId) +
+            '?query=Image-' + tmp.imageId +
+            '&callback=?',
+             onAnnotations);
         $.getJSON('{% url 'webgateway_object_table_query' 'Plate.wells' 999 %}'.replace('999', tmp.wellId) +
             '?query=Well-' + tmp.wellId +
             '&callback=?',
