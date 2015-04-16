@@ -28,7 +28,7 @@ from django.core.servers.basehttp import FileWrapper
 from django.views.decorators.http import require_http_methods, require_GET, require_POST
 from omero.rtypes import rlong, unwrap
 from omero.constants.namespaces import NSBULKANNOTATIONS
-from omeroweb.webgateway.plategrid import PlateGrid
+from plategrid import PlateGrid
 from omero_version import build_year
 from marshal import imageMarshal, shapeMarshal
 
