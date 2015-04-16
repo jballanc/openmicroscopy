@@ -4931,11 +4931,10 @@ _
         """
         if self._gridSize is None:
             q = self._conn.getQueryService()
-            params = omero.sys.Parameters()
-            params.map = {}
-            params.map['pid'] = omero_type(self.getId())
+            params = omero.sys.ParametersI()
+            params.addId(self.getId())
             query = "select max(row), max(column) from Well "\
-                    "where plate.id = :pid"
+                    "where plate.id = :id"
             res = q.projection(query, params, self._conn.SERVICE_OPTS)
             (row, col) = res[0]
             self._gridSize = {'rows': row.val+1, 'columns': col.val+1}
