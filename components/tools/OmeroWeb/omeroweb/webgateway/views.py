@@ -15,6 +15,7 @@
 
 import re
 import json
+from datetime import datetime
 import omero
 import omero.clients
 
@@ -27,6 +28,7 @@ from django.core.servers.basehttp import FileWrapper
 from django.views.decorators.http import require_http_methods, require_GET, require_POST
 from omero.rtypes import rlong, unwrap
 from omero.constants.namespaces import NSBULKANNOTATIONS
+from plategrid import PlateGrid
 from omero_version import build_year
 from marshal import imageMarshal, shapeMarshal
 
@@ -1181,51 +1183,39 @@ def wellData_json (request, conn=None, _internal=False, **kwargs):
     rv = well.simpleMarshal(xtra=xtra)
     return rv
 
+
 @login_required()
 @jsonp
-def plateGrid_json (request, pid, field=0, conn=None, **kwargs):
+def plateGrid_json(request, pid, field=0, conn=None, **kwargs):
     """
     """
-    plate = conn.getObject('plate', long(pid))
     try:
         field = long(field or 0)
     except ValueError:
         field = 0
-    if plate is None:
-        return HttpResponseServerError('""', mimetype='application/javascript')
-    grid = []
     prefix = kwargs.get('thumbprefix', 'webgateway.views.render_thumbnail')
     thumbsize = int(request.REQUEST.get('size', 64))
     logger.debug(thumbsize)
-
-    def urlprefix(iid):
-        return reverse(prefix, args=(iid,thumbsize))
-    xtra = {'thumbUrlPrefix': kwargs.get('urlprefix', urlprefix)}
     server_id = kwargs['server_id']
 
-    rv = webgateway_cache.getJson(request, server_id, plate, 'plategrid-%d-%d' % (field, thumbsize))
+    def urlprefix(iid):
+        return reverse(prefix, args=(iid, thumbsize))
+    plateGrid = PlateGrid(conn, pid, field,
+                          kwargs.get('urlprefix', urlprefix))
+    plate = plateGrid.plate
+    if plate is None:
+        return Http404
+
+    rv = webgateway_cache.getJson(request, server_id, plate,
+                                  'plategrid-%d-%d' % (field, thumbsize))
     if rv is None:
-        plate.setGridSizeConstraints(8,12)
-        for row in plate.getWellGrid(field):
-            tr = []
-            for e in row:
-                if e:
-                    i = e.getImage()
-                    if i:
-                        t = i.simpleMarshal(xtra=xtra)
-                        t['wellId'] = e.getId()
-                        t['field'] = field
-                        tr.append(t)
-                        continue
-                tr.append(None)
-            grid.append(tr)
-        rv = {'grid': grid,
-              'collabels': plate.getColumnLabels(),
-              'rowlabels': plate.getRowLabels()}
-        webgateway_cache.setJson(request, server_id, plate, json.dumps(rv), 'plategrid-%d-%d' % (field, thumbsize))
+        rv = plateGrid.metadata
+        webgateway_cache.setJson(request, server_id, plate, json.dumps(rv),
+                                 'plategrid-%d-%d' % (field, thumbsize))
     else:
         rv = json.loads(rv)
     return rv
+
 
 @login_required()
 @jsonp
