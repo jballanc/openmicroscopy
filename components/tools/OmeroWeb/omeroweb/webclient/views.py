@@ -794,7 +794,7 @@ def load_metadata_details(request, c_type, c_id, conn=None, share_id=None, **kwa
 
     # the index of a field within a well
     index = getIntOrDefault(request, 'index', 0)
-
+    t0 = datetime.datetime.now()
     # we only expect a single object, but forms can take multiple objects
     images = c_type == "image" and list(conn.getObjects("Image", [c_id])) or list()
     datasets = c_type == "dataset" and list(conn.getObjects("Dataset", [c_id])) or list()
@@ -821,6 +821,9 @@ def load_metadata_details(request, c_type, c_id, conn=None, share_id=None, **kwa
 
     initial={'selected':selected, 'images':images,  'datasets':datasets, 'projects':projects, 'screens':screens, 'plates':plates, 'acquisitions':acquisitions, 'wells':wells, 'shares': shares}
 
+    t1 = datetime.datetime.now()
+    logger.debug('time to get object: %s' % (t1 - t0))
+    t0 = t1
     form_comment = None
     figScripts = None
     if c_type in ("share", "discussion"):
@@ -832,12 +835,21 @@ def load_metadata_details(request, c_type, c_id, conn=None, share_id=None, **kwa
     else:
         try:
             manager = BaseContainer(conn, index=index, **{str(c_type): long(c_id)})
+            t1 = datetime.datetime.now()
+            logger.debug('time to create manager: %s' % (t1 - t0))
+            t0 = t1
         except AttributeError, x:
             return handlerInternalError(request, x)
         if share_id is None:
             template = "webclient/annotations/metadata_general.html"
             manager.annotationList()
+            t1 = datetime.datetime.now()
+            logger.debug('time to generate annotation list: %s' % (t1 - t0))
+            t0 = t1
             figScripts = manager.listFigureScripts()
+            t1 = datetime.datetime.now()
+            logger.debug('time to list figure scripts: %s' % (t1 - t0))
+            t0 = t1
             form_comment = CommentAnnotationForm(initial=initial)
         else:
             template = "webclient/annotations/annotations_share.html"
