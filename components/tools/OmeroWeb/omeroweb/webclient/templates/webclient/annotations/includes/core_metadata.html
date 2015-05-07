@@ -1,4 +1,5 @@
 {% load common_filters %}
+{% load common_tags %}
 {% comment %}
 <!--
   Copyright (C) 2012-2013 University of Dundee & Open Microscopy Environment.
@@ -19,8 +20,9 @@
 -->
 {% endcomment %}
 
-
+{% startbenchmark "core metadata table" %}
 <table class="core_metadata">
+    {% startbenchmark "general metadata" %}
     <tr>
         <th>Owner:</th>
         <td id='owner_fullname'>{{ image.getOwner.getFullName }}</td>
@@ -37,6 +39,8 @@
         <th>Dimensions (XY):</th>
         <td id='dims_xy'>{{ image.getSizeX }} x {{ image.getSizeY }}</td>
     </tr>
+    {% endbenchmark %}
+    {% startbenchmark "pixels" %}
     <tr>
         <th>Pixels Type:</th>
         <td id='pixels_type'>{{ image.getPixelsType }}</td>
@@ -52,11 +56,15 @@
             </span>
         </td>
     </tr>
+    {% endbenchmark %}
     <tr>
+      {% startbenchmark "z-sections/timepoints" %}
         <th>Z-sections/Timepoints:</th>
         <td id='dims_zt'>{{ image.getSizeZ }} x {{ image.getSizeT }}</td>
+      {% endbenchmark %}
     </tr>
     <tr>
+      {% startbenchmark "channels" %}
         <th>Channels:</th>
         <td id='channel_names'>
             <div>
@@ -94,13 +102,17 @@
                 {% endif %}
             </div>
         </td>
+        {% endbenchmark %}
     </tr>
     {% if manager.well %}
+    {% startbenchmark "well status" %}
     <tr>
         <th>Status:</th>
         <td id='well_status'>
             {{ manager.well.status|default:"None" }}
         </td>
     </tr>
+    {% endbenchmark %}
     {% endif %}
 </table>
+{% endbenchmark %}
