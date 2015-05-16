@@ -14,11 +14,27 @@
 """
 
 import pytest
+import test.integration.library as lib
 
-from omero.model import ImageI
+from omero.model import ImageI, ChannelI, LogicalChannelI
 from omero.rtypes import rstring, rint, rtime
 from datetime import datetime
 from uuid import uuid4
+
+
+@pytest.fixture()
+def itest(request):
+    """
+    Returns a new L{test.integration.library.ITest} instance. With attached
+    finalizer so that pytest will clean it up.
+    """
+    o = lib.ITest()
+    o.setup_method(None)
+
+    def finalizer():
+        o.teardown_method(None)
+    request.addfinalizer(finalizer)
+    return o
 
 
 @pytest.fixture()
@@ -48,6 +64,47 @@ def image_no_acquisition_date(request, gatewaywrapper):
     return gw.getObject('Image', image_id)
 
 
+@pytest.fixture()
+def image_channel_factory(itest, gatewaywrapper):
+
+    def make_image_channel(channel):
+        gatewaywrapper.loginAsAuthor()
+        gw = gatewaywrapper.gateway
+        update_service = gw.getUpdateService()
+        pixels = itest.pix(client=gw.c)
+        pixels.addChannel(channel)
+        pixels = update_service.saveAndReturnObject(pixels)
+        return gw.getObject('Image', pixels.image.id)
+    return make_image_channel
+
+
+
+@pytest.fixture()
+def labeled_channel(image_channel_factory):
+    channel = ChannelI()
+    lchannel = LogicalChannelI()
+    lchannel.name = rstring('a channel')
+    channel.logicalChannel = lchannel
+    return image_channel_factory(channel)
+
+
+@pytest.fixture()
+def emissionWave_channel(image_channel_factory):
+    channel = ChannelI()
+    lchannel = LogicalChannelI()
+    lchannel.emissionWave = rint(123)
+    channel.logicalChannel = lchannel
+    return image_channel_factory(channel)
+
+
+@pytest.fixture()
+def unlabeled_channel(image_channel_factory):
+    channel = ChannelI()
+    lchannel = LogicalChannelI()
+    channel.logicalChannel = lchannel
+    return image_channel_factory(channel)
+
+
 class TestImageWrapper(object):
 
     def testGetDate(self, gatewaywrapper, image):
@@ -71,3 +128,33 @@ class TestImageWrapper(object):
             'id': image.getId(),
             'name': 'an image'
         }
+
+    def testChannelLabel(self, labeled_channel):
+        labels = labeled_channel.getChannelLabels()
+        channels = labeled_channel.getChannels()
+        assert labels
+        assert channels
+        assert len(labels) == len(channels)
+
+        for channel in channels:
+            assert channel.getLabel() in labels
+
+    def testChannelEmissionWaveLabel(self, emissionWave_channel):
+        labels = emissionWave_channel.getChannelLabels()
+        channels = emissionWave_channel.getChannels()
+        assert labels
+        assert channels
+        assert len(labels) == len(channels)
+
+        for channel in channels:
+            assert channel.getLabel() in labels
+
+    def testChannelNoLabel(self, unlabeled_channel):
+        labels = unlabeled_channel.getChannelLabels()
+        channels = unlabeled_channel.getChannels()
+        assert labels
+        assert channels
+        assert len(labels) == len(channels)
+
+        for channel in channels:
+            assert channel.getLabel() in labels
