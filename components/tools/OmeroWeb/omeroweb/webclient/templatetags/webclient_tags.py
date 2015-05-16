@@ -25,7 +25,6 @@
 
 
 import logging
-from datetime import datetime
 
 from django import template
 from django.templatetags.static import PrefixNode

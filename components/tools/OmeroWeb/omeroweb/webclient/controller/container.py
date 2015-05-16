@@ -28,19 +28,10 @@ from omero.rtypes import rstring, rlong, unwrap
 from django.conf import settings
 from django.utils.encoding import smart_str
 import logging
-from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 from webclient.controller import BaseController
-
-def time_method(meth):
-    def wrapped(*args, **kwargs):
-        t0 = datetime.now()
-        ret = meth(*args, **kwargs)
-        logger.debug("time to execute %s: %s" % (meth, datetime.now() - t0))
-        return ret
-    return wrapped
 
 class BaseContainer(BaseController):
     
@@ -167,17 +158,14 @@ class BaseContainer(BaseController):
         obj = self._get_object()
         return obj is not None and obj.canAnnotate() or False
 
-    @time_method
     def canEdit(self):
         obj = self._get_object()
         return obj is not None and obj.canEdit() or None
 
-    @time_method
     def getPermsCss(self):
         """ Shortcut to get permissions flags, E.g. for css """
         return self._get_object().getPermsCss()
 
-    @time_method
     def getNumberOfFields(self):
         """ Applies to Plates (all fields) or PlateAcquisitions"""
         if self.plate is not None:
@@ -186,7 +174,6 @@ class BaseContainer(BaseController):
             p = self.conn.getObject("Plate", self.acquisition._obj.plate.id.val)
             return p.getNumberOfFields(self.acquisition.getId())
     
-    @time_method
     def getPlateId(self):
         """ Used by templates that display Plates or PlateAcquisitions """
         if self.plate is not None:
@@ -194,7 +181,6 @@ class BaseContainer(BaseController):
         elif self.acquisition:
             return self.acquisition._obj.plate.id.val
         
-    @time_method
     def isDownloadDisabled(self, objDict=None):
         """
         Returns True only if we have an SPW object(s) and
@@ -215,7 +201,6 @@ class BaseContainer(BaseController):
         if hasattr(settings, 'PLATE_DOWNLOAD_ENABLED'):
             return (not settings.PLATE_DOWNLOAD_ENABLED)
 
-    @time_method
     def listFigureScripts(self, objDict=None):
         """
         This configures all the Figure Scripts, setting their enabled status given the
@@ -247,7 +232,6 @@ class BaseContainer(BaseController):
         return figureScripts
 
 
-    @time_method
     def openAstexViewerCompatible(self):
         """
         Is the image suitable to be viewed with the Volume viewer 'Open Astex Viewer' applet?
@@ -277,13 +261,11 @@ class BaseContainer(BaseController):
 
         return True
 
-    @time_method
     def formatMetadataLine(self, l):
         if len(l) < 1:
             return None
         return l.split("=")
         
-    @time_method
     def originalMetadata(self):
         # TODO: hardcoded values.
         self.global_metadata = list()
@@ -310,7 +292,6 @@ class BaseContainer(BaseController):
                         self.companion_files.append(ann)
 
 
-    @time_method
     def channelMetadata(self):
         self.channel_metadata = None
         try:
@@ -324,7 +305,6 @@ class BaseContainer(BaseController):
         if self.channel_metadata is None:
             self.channel_metadata = list()
         
-    @time_method
     def loadTags(self, eid=None):
         if eid is not None:
             if eid == -1:       # Load data for all users
@@ -337,7 +317,6 @@ class BaseContainer(BaseController):
         self.tags.sort(key=lambda x: x.getTextValue() and x.getTextValue().lower())
         self.t_size = len(self.tags)
     
-    @time_method
     def loadTagsRecursive(self, eid=None, offset=None, limit=1000):
         if eid is not None:
             if eid == -1:       # Load data for all users
@@ -351,11 +330,9 @@ class BaseContainer(BaseController):
             eid = self.conn.getEventContext().userId
         self.tags_recursive, self.tags_recursive_owners = self.conn.listTagsRecursive(eid, offset, limit)
 
-    @time_method
     def getTagCount(self, eid=None):
         return self.conn.getTagCount(eid)
 
-    @time_method
     def loadDataByTag(self):
         pr_list = list(self.conn.getObjectsByAnnotations('Project',[self.tag.id]))
         ds_list = list(self.conn.getObjectsByAnnotations('Dataset',[self.tag.id]))
@@ -375,7 +352,6 @@ class BaseContainer(BaseController):
             'screens':sc_list, 'plates':pl_list, 'aquisitions': pa_list}
         self.c_size = len(pr_list)+len(ds_list)+len(im_list)+len(sc_list)+len(pl_list)+len(pa_list)
         
-    @time_method
     def listImagesInDataset(self, did, eid=None, page=None, load_pixels=False):
         if eid is not None:
             if eid == -1:       # Load data for all users
@@ -390,7 +366,6 @@ class BaseContainer(BaseController):
         if page is not None:
             self.paging = self.doPaging(page, len(im_list), self.c_size)
     
-    @time_method
     def listContainerHierarchy(self, eid=None):
         if eid is not None:
             if eid == -1:
@@ -414,7 +389,6 @@ class BaseContainer(BaseController):
         self.containers={'projects': pr_list, 'datasets': ds_list, 'screens': sc_list, 'plates': pl_list}
         self.c_size = len(pr_list)+len(ds_list)+len(sc_list)+len(pl_list)
     
-    @time_method
     def listOrphanedImages(self, eid=None, page=None):
         if eid is not None:
             if eid == -1:
@@ -436,7 +410,6 @@ class BaseContainer(BaseController):
             self.paging = self.doPaging(page, len(im_list), self.c_size)
 
     # Annotation list
-    @time_method
     def annotationList(self):
         self.text_annotations = list()
         self.rating_annotations = list()
@@ -496,7 +469,6 @@ class BaseContainer(BaseController):
         self.fileannSize = len(self.file_annotations)
         self.tgannSize = len(self.tag_annotations)
 
-    @time_method
     def canUseOthersAnns(self):
         """
         Test to see whether other user's Tags, Files etc should be provided for annotating.
@@ -520,7 +492,6 @@ class BaseContainer(BaseController):
         return False
 
 
-    @time_method
     def loadBatchAnnotations(self, objDict, ann_ids=None, addedByMe=False):
         """ 
         Look up the Tags, Files, Comments, Ratings etc that are on one or more of 
@@ -595,7 +566,6 @@ class BaseContainer(BaseController):
         return batchAnns
 
 
-    @time_method
     def getTagsByObject(self, parent_type=None, parent_ids=None):
         eid = (not self.canUseOthersAnns()) and self.conn.getEventContext().userId or None
         
@@ -633,7 +603,6 @@ class BaseContainer(BaseController):
                 return sort_tags(self.conn.getObjects("TagAnnotation", params=params))
             return sort_tags(self.conn.getObjects("TagAnnotation"))
     
-    @time_method
     def getFilesByObject(self, parent_type=None, parent_ids=None):
         eid = (not self.canUseOthersAnns()) and self.conn.getEventContext().userId or None
         ns = [omero.constants.namespaces.NSCOMPANIONFILE, omero.constants.namespaces.NSEXPERIMENTERPHOTO]
@@ -669,7 +638,6 @@ class BaseContainer(BaseController):
     ####################################################################
     # Creation
     
-    @time_method
     def createDataset(self, name, description=None, img_ids=None):
         ds = omero.model.DatasetI()
         ds.name = rstring(str(name))
@@ -692,7 +660,6 @@ class BaseContainer(BaseController):
             self.conn.saveArray(links)
         return dsid
         
-    @time_method
     def createProject(self, name, description=None):
         pr = omero.model.ProjectI()
         pr.name = rstring(str(name))
@@ -700,7 +667,6 @@ class BaseContainer(BaseController):
             pr.description = rstring(str(description))
         return self.conn.saveAndReturnId(pr)
     
-    @time_method
     def createScreen(self, name, description=None):
         sc = omero.model.ScreenI()
         sc.name = rstring(str(name))
@@ -709,14 +675,12 @@ class BaseContainer(BaseController):
         return self.conn.saveAndReturnId(sc)
 
 
-    @time_method
     def checkMimetype(self, file_type):
         if file_type is None or len(file_type) == 0:
             file_type = "application/octet-stream"
         return file_type
 
 
-    @time_method
     def createCommentAnnotations(self, content, oids, well_index=0):
         ann = omero.model.CommentAnnotationI()
         ann.textValue = rstring(str(content))
@@ -745,7 +709,6 @@ class BaseContainer(BaseController):
         return self.conn.getObject("CommentAnnotation", ann.getId())
 
     
-    @time_method
     def createTagAnnotations(self, tag, desc, oids, well_index=0, tag_group_id=None):
         """
         Creates a new tag (with description) OR uses existing tag with the specified name if found.
@@ -809,7 +772,6 @@ class BaseContainer(BaseController):
         return ann.getId()
 
 
-    @time_method
     def createFileAnnotations(self, newFile, oids, well_index=0):
         format = self.checkMimetype(newFile.content_type)
         
@@ -849,7 +811,6 @@ class BaseContainer(BaseController):
         return fa.getId()
 
 
-    @time_method
     def createAnnotationsLinks(self, atype, tids, oids, well_index=0):
         """
         Links existing annotations to 1 or more objects
@@ -910,7 +871,6 @@ class BaseContainer(BaseController):
     ################################################################
     # Update
     
-    @time_method
     def updateDescription(self, o_type, description=None):
         obj = getattr(self, o_type)._obj
         if description is not None and description != "" :
@@ -919,7 +879,6 @@ class BaseContainer(BaseController):
             obj.description = None
         self.conn.saveObject(obj)
     
-    @time_method
     def updateName(self, o_type, name):
         obj = getattr(self, o_type)._obj
         if o_type not in ('tag', 'tagset'):
@@ -928,7 +887,6 @@ class BaseContainer(BaseController):
             obj.textValue = rstring(str(name))
         self.conn.saveObject(obj)
     
-    @time_method
     def updateImage(self, name, description=None):
         img = self.image._obj
         img.name = rstring(str(name))
@@ -938,7 +896,6 @@ class BaseContainer(BaseController):
             img.description = None
         self.conn.saveObject(img)
     
-    @time_method
     def updateDataset(self, name, description=None):
         container = self.dataset._obj
         container.name = rstring(str(name))
@@ -948,7 +905,6 @@ class BaseContainer(BaseController):
             container.description = None
         self.conn.saveObject(container)
     
-    @time_method
     def updatePlate(self, name, description=None):
         container = self.plate._obj
         container.name = rstring(str(name))
@@ -958,7 +914,6 @@ class BaseContainer(BaseController):
             container.description = None
         self.conn.saveObject(container)
     
-    @time_method
     def updateProject(self, name, description=None):
         container = self.project._obj
         container.name = rstring(str(name))
@@ -968,7 +923,6 @@ class BaseContainer(BaseController):
             container.description = None
         self.conn.saveObject(container)
     
-    @time_method
     def updateScreen(self, name, description=None):
         container = self.screen._obj
         container.name = rstring(str(name))
@@ -979,7 +933,6 @@ class BaseContainer(BaseController):
         self.conn.saveObject(container)
 
 
-    @time_method
     def move(self, parent, destination):
         if self.project is not None:
             return 'Cannot move project.'
@@ -1105,7 +1058,6 @@ class BaseContainer(BaseController):
             return 'No data was choosen.'
         return 
     
-    @time_method
     def remove( self, parents, index, tag_owner_id=None):
         """
         Removes the current object (file, tag, comment, dataset, plate, image) from its parents by
@@ -1168,7 +1120,6 @@ class BaseContainer(BaseController):
             else:
                 raise AttributeError("Attribute not specified. Cannot be removed.")
     
-    @time_method
     def removemany(self, images):
         if self.dataset is not None:
             dil = self.dataset.getParentLinks('image', images)
@@ -1180,7 +1131,6 @@ class BaseContainer(BaseController):
     ##########################################################
     # Copy
     
-    @time_method
     def paste(self, destination):
         if self.project is not None:
             return 'Cannot paste project.'
@@ -1252,7 +1202,6 @@ class BaseContainer(BaseController):
         else:
             return 'No data was choosen.'
     
-    @time_method
     def copyImageToDataset(self, source, destination=None):
         if destination is None:
             dsls = self.conn.getDatasetImageLinks(source[1]) #gets every links for child
@@ -1266,7 +1215,6 @@ class BaseContainer(BaseController):
             new_dsl.setParent(ds._obj)
             self.conn.saveObject(new_dsl)
     
-    @time_method
     def copyImagesToDataset(self, images, dataset):
         if dataset is not None and dataset[0] is not "dataset":
             ims = self.conn.getObjects("Image", images)
@@ -1280,7 +1228,6 @@ class BaseContainer(BaseController):
             self.conn.saveArray(link_array)
         raise AttributeError("Destination not supported")
     
-    @time_method
     def copyDatasetToProject(self, source, destination=None):
         if destination is not None and destination[0] is not "project":
             ds = self.conn.getObject("Dataset", source[1])
@@ -1291,7 +1238,6 @@ class BaseContainer(BaseController):
             self.conn.saveObject(new_pdl)
         raise AttributeError("Destination not supported")
    
-    @time_method
     def copyDatasetsToProject(self, datasets, project):
         if project is not None and project[0] is not "project":
             dss = self.conn.getObjects("Dataset", datasets)
@@ -1305,7 +1251,6 @@ class BaseContainer(BaseController):
             self.conn.saveArray(link_array)
         raise AttributeError("Destination not supported")
     
-    @time_method
     def copyPlateToScreen(self, source, destination=None):
         if destination is not None and destination[0] is not "screen":
             pl = self.conn.getObject("Plate", source[1])
@@ -1316,7 +1261,6 @@ class BaseContainer(BaseController):
             self.conn.saveObject(new_spl)
         raise AttributeError("Destination not supported")
     
-    @time_method
     def copyPlatesToScreen(self, plates, screen):
         if screen is not None and screen[0] is not "screen":
             pls = self.conn.getObjects("Plate", plates)
@@ -1334,7 +1278,6 @@ class BaseContainer(BaseController):
     ##########################################################
     # Delete
     
-    @time_method
     def deleteItem(self, child=False, anns=False):
         handle = None
         if self.image:
@@ -1355,7 +1298,6 @@ class BaseContainer(BaseController):
             handle = self.conn.deleteObjects("Annotation", [self.file.id], deleteAnns=anns)
         return handle
     
-    @time_method
     def deleteObjects(self, otype, ids, child=False, anns=False):
         return self.conn.deleteObjects(otype, ids, deleteChildren=child, deleteAnns=anns)
         
