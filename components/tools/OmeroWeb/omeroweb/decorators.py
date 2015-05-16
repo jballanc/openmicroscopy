@@ -25,7 +25,6 @@ Decorators for use with OMERO.web applications.
 
 import logging
 import json
-from datetime import datetime
 
 from django.http import Http404, HttpResponse, HttpResponseRedirect, HttpResponseForbidden, StreamingHttpResponse
 
@@ -452,10 +451,6 @@ class render_response(object):
                 ctx.prepare_context(request, context, *args, **kwargs)
                 t = template_loader.get_template(template)
                 c = RequestContext(request, context)
-                t0 = datetime.now()
-                content = t.render(c)
-                logger.debug('time to render template: %s' %
-                             (datetime.now() - t0))
-                return HttpResponse(content)
+                return HttpResponse(t.render(c))
         return update_wrapper(wrapper, f)
 

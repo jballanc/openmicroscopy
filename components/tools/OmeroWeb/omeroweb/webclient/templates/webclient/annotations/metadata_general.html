@@ -24,9 +24,7 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 -->
 {% endcomment %}
-{% startbenchmark "page" %}
 
-    {% startbenchmark "document ready javascript" %}
     <script type="text/javascript">
         
         $(document).ready(function()
@@ -488,7 +486,6 @@
             });
             
     </script>
-    {% endbenchmark %}
 
 
         <!-- This is used by AJAX loading the right panel, to check it matches current selection -->
@@ -498,12 +495,10 @@
         {% if not manager.tag %}
         
         
-        {% startbenchmark "general metadata" %}
         <!-- ANNOTATIONS "General" -->
         <div id="general_tab" class="right_tab_inner" >
            
             {% if manager.image %}            
-            {% startbenchmark "image metadata" %}
 
             {% with image=manager.image %}
                 {% include "webclient/annotations/includes/toolbar.html" %}
@@ -586,7 +581,6 @@
             {% with image=manager.image parent=manager.image.getParent %}
                 {% include "webclient/annotations/includes/core_metadata.html" %}
             {% endwith %}
-            {% endbenchmark %}
 
 
             {% else %}
@@ -659,13 +653,10 @@
             {% endif %}
             
             {% if manager.well %}            
-            {% startbenchmark "well metadata" %}
 
-            {% startbenchmark "well toolbar" %}
             {% with image=manager.well.getWellSample.image disableDownload=manager.isDownloadDisabled omeTiffDisabled=True %}
                 {% include "webclient/annotations/includes/toolbar.html" %}
             {% endwith %}
-            {% endbenchmark %}
 
                         <!-- Image (in WellSample) Description -->
             {% with obj=manager.well.getWellSample.image nameText=manager.well.getWellSample.image.name %}
@@ -688,7 +679,6 @@
             
             <div style="clear:both"></div>
 
-            {% startbenchmark "well sample original file path" %}
             {% if manager.well.getWellSample.image.showOriginalFilePaths %}
             <!-- duplicated under 'image' above -->
             <div style="clear:both"></div>
@@ -699,31 +689,19 @@
                 <div style="clear:both"></div>
             </div>
             {% endif %}
-            {% endbenchmark %}
 
             <hr/>
             
-            {% startbenchmark "well image description" %}
                         <!-- Image (in WellSample) Description -->
-            {% startbenchmark "get well sample image" %}
             {% with obj=manager.well.getWellSample.image %}
-            {% endbenchmark %}
-            {% startbenchmark "image description include" %}
                 {% include "webclient/annotations/includes/description.html" %}
-            {% endbenchmark %}
             {% endwith %}
 
-            {% startbenchmark "get well sample image (again)" %}
             <!-- Include table of core metadata, Owner, SizeX,Y,Z, Channels etc -->
             {% with image=manager.well.getWellSample.image %}
-            {% endbenchmark %}
-            {% startbenchmark "image core metadata include" %}
                 {% include "webclient/annotations/includes/core_metadata.html" %}
-            {% endbenchmark %}
             {% endwith %}
-            {% endbenchmark %}
 
-            {% endbenchmark %}
             {% else %}
                 {% if manager.acquisition %}
 
@@ -844,7 +822,6 @@
                 {% endif %}
             {% endif %}
         
-            {% endbenchmark %}
         
         
             
@@ -859,7 +836,6 @@
             
         
         
-    {% startbenchmark "annotations" %}
     <!-- ANNOTATIONS -->
     <!--<h1>{% trans "Annotations" %}</h1>-->
             
@@ -1031,7 +1007,6 @@
                         {% endfor %}
                     </table>
             </div>
-        {% endbenchmark %}
                     
                     
                     
@@ -1039,7 +1014,6 @@
 
             
             
-            {% startbenchmark "comments" %}
             <!-- COMMENTS -->
             <div class="annotations_section">
                 <h2>{% trans "Comment:" %}</h2>
@@ -1091,13 +1065,11 @@
             
         </div>
         {% endif %}
-        {% endbenchmark %}
 
 
 
 
 
-        {% startbenchmark "tags" %}
         {% if manager.tag %}
 
         <div id="general_tab" class="right_tab_inner" >
@@ -1147,8 +1119,6 @@
                 </table>
         </div>
         {% endif %}
-        {% endbenchmark %}
     
-{% endbenchmark %}
     
 
