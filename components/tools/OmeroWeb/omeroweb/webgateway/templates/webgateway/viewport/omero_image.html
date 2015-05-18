@@ -957,8 +957,13 @@
                   });
     return false;
   }
+
   function onRenderMasksChanged(input) {
-     viewport.loadedImg.current.renderMasks = input.checked;
+     if (input.checked) {
+         viewport.loadedImg.current.renderMasks = 1;
+     } else {
+         viewport.loadedImg.current.renderMasks = 0;
+     }
      viewport.update();
   }
 
@@ -1229,7 +1234,7 @@
                     <a href="#" onclick="show_rois(); return false;">Show ROIs</a> |
                     <a href="#" onclick="hide_rois(); return false;">Hide</a>
                     <br />
-                    <input type="checkbox" name="render_masks" onchange="onRenderMasksChanged(this);">Render Masks?</input>
+                    <input id="renderMasksCheckbox" type="checkbox" name="render_masks" onchange="onRenderMasksChanged(this);">Render Masks?</input>
                 {% endifnotequal %}
           </div>
 {% endblock roi_buttons %}
@@ -1272,9 +1277,14 @@
   var gs_static_location_prefix='{% static "" %}';
 
   $(document).ready(function () {
+
+    {% if opts.render_masks %}
+      if ({{ opts.render_masks }}) {
+        $("#renderMasksCheckbox").attr('checked', true);
+      };
+    {% endif %}
+
     /* Prepare the viewport */
-    
-    
     viewport = $.WeblitzViewport($('#weblitz-viewport'), '{{ viewport_server }}',{% block viewport_opts %}{'mediaroot': '{{ STATIC_URL }}' }{% endblock %});
     viewport.bind('imageLoad', _refresh_cb);
 
