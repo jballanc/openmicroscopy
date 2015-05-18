@@ -219,6 +219,7 @@ def getImgDetailsFromReq (request, as_string=False):
     c - a comma separated list of channels to be rendered (start index 1)
       - format for each entry [-]ID[|wndst:wndend][#HEXCOLOR][,...]
     zm - the zoom setting (as a percentual value)
+    render_masks - render_masks? (0, 1)
 
     @param request:     http request with keys above
     @param as_string:   If True, return a string representation of the rendering details
@@ -228,7 +229,7 @@ def getImgDetailsFromReq (request, as_string=False):
 
     r = request.REQUEST
     rv = {}
-    for k in ('z', 't', 'q', 'm', 'zm', 'x', 'y', 'p'):
+    for k in ('z', 't', 'q', 'm', 'zm', 'x', 'y', 'p', 'render_masks'):
         if r.has_key(k):
            rv[k] = r[k]
     if r.has_key('c'):
