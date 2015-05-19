@@ -63,6 +63,7 @@ var Metadata = function () {
 	  this.size.z = t;
       }
     this.current.zoom = 100;
+    this.current.renderMasks = 0;
   };
   
   this.hasSameSettings = function (other) {
@@ -1008,7 +1009,7 @@ jQuery._WeblitzViewport = function (container, server, options) {
       query.push('debug='+this.loadedImg.current.query.debug);
     }
     /* Render masks? */
-    if (this.loadedImg.current.renderMasks) {
+    if (this.loadedImg.current.renderMasks == 1) {
        query.push('render_masks=1');
     }
     return query.join('&');
@@ -1058,6 +1059,9 @@ jQuery._WeblitzViewport = function (container, server, options) {
     if (query.lp) {
       this.prepareLinePlot(query.lp.substring(0,1));
       linePlot.position = parseInt(query.lp.substring(1), 10);
+    }
+    if (query.render_masks) {
+      this.loadedImg.current.renderMasks = query.render_masks;
     }
   };
 
