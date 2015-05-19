@@ -33,6 +33,27 @@ register = template.Library()
 
 logger = logging.getLogger(__name__)
 
+from datetime import datetime
+
+@register.simple_tag(takes_context=True)
+def startbenchmark(context, name):
+    benchmarks = context.get('benchmarks', [])
+    benchmarks.append((name, datetime.now()))
+    context['benchmarks'] = benchmarks
+    return ''
+
+@register.simple_tag(takes_context=True)
+def endbenchmark(context):
+    benchmarks = context.get('benchmarks', [])
+    if benchmarks:
+        name, start = benchmarks.pop()
+        path = ''
+        for n, _ in benchmarks:
+            path += n + ' -> '
+        logger.debug('Rendering %s took %s seconds' %
+                     (path + name, datetime.now() - start))
+    return ''
+
 # makes settings available in template
 @register.tag
 def setting ( parser, token ):

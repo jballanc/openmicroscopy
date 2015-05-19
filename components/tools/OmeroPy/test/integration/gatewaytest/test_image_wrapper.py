@@ -14,11 +14,26 @@
 """
 
 import pytest
+import test.integration.library as lib
 
-from omero.model import ImageI
+from omero.model import ImageI, ChannelI, LogicalChannelI
 from omero.rtypes import rstring, rint, rtime
 from datetime import datetime
-from uuid import uuid4
+
+
+@pytest.fixture()
+def itest(request):
+    """
+    Returns a new L{test.integration.library.ITest} instance. With attached
+    finalizer so that pytest will clean it up.
+    """
+    o = lib.ITest()
+    o.setup_method(None)
+
+    def finalizer():
+        o.teardown_method(None)
+    request.addfinalizer(finalizer)
+    return o
 
 
 @pytest.fixture()
@@ -48,6 +63,56 @@ def image_no_acquisition_date(request, gatewaywrapper):
     return gw.getObject('Image', image_id)
 
 
+@pytest.fixture()
+def image_channel_factory(itest, gatewaywrapper):
+
+    def make_image_channels(channels):
+        gatewaywrapper.loginAsAuthor()
+        gw = gatewaywrapper.gateway
+        update_service = gw.getUpdateService()
+        pixels = itest.pix(client=gw.c)
+        for channel in channels:
+            pixels.addChannel(channel)
+        pixels = update_service.saveAndReturnObject(pixels)
+        return gw.getObject('Image', pixels.image.id)
+    return make_image_channels
+
+
+@pytest.fixture()
+def labeled_channel(image_channel_factory):
+    channels = list()
+    for index in range(2):
+        channel = ChannelI()
+        lchannel = LogicalChannelI()
+        lchannel.name = rstring('a channel %d' % index)
+        channel.logicalChannel = lchannel
+        channels.append(channel)
+    return image_channel_factory(channels)
+
+
+@pytest.fixture()
+def emissionWave_channel(image_channel_factory):
+    channels = list()
+    for emission_wave in (123, 456):
+        channel = ChannelI()
+        lchannel = LogicalChannelI()
+        lchannel.emissionWave = rint(emission_wave)
+        channel.logicalChannel = lchannel
+        channels.append(channel)
+    return image_channel_factory(channels)
+
+
+@pytest.fixture()
+def unlabeled_channel(image_channel_factory):
+    channels = list()
+    for index in range(2):
+        channel = ChannelI()
+        lchannel = LogicalChannelI()
+        channel.logicalChannel = lchannel
+        channels.append(channel)
+    return image_channel_factory(channels)
+
+
 class TestImageWrapper(object):
 
     def testGetDate(self, gatewaywrapper, image):
@@ -60,7 +125,6 @@ class TestImageWrapper(object):
         creation_event_date = image_no_acquisition_date.creationEventDate()
         assert date == creation_event_date
 
-
     def testSimpleMarshal(self, gatewaywrapper, image):
         marshalled = image.simpleMarshal()
         assert marshalled == {
@@ -71,3 +135,18 @@ class TestImageWrapper(object):
             'id': image.getId(),
             'name': 'an image'
         }
+
+    def testChannelLabel(self, labeled_channel):
+        labels_a = labeled_channel.getChannelLabels()
+        labels_b = [v.getLabel() for v in labeled_channel.getChannels()]
+        assert labels_a == labels_b == ['a channel 0', 'a channel 1']
+
+    def testChannelEmissionWaveLabel(self, emissionWave_channel):
+        labels_a = emissionWave_channel.getChannelLabels()
+        labels_b = [v.getLabel() for v in emissionWave_channel.getChannels()]
+        assert labels_a == labels_b == ['123', '456']
+
+    def testChannelNoLabel(self, unlabeled_channel):
+        labels_a = unlabeled_channel.getChannelLabels()
+        labels_b = [v.getLabel() for v in unlabeled_channel.getChannels()]
+        assert labels_a == labels_b == ['0', '1']
