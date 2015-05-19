@@ -1279,9 +1279,7 @@
   $(document).ready(function () {
 
     {% if opts.render_masks %}
-      if ({{ opts.render_masks }}) {
-        $("#renderMasksCheckbox").attr('checked', true);
-      };
+      $("#renderMasksCheckbox").attr('checked', {{ opts.render_masks }} == 1);
     {% endif %}
 
     /* Prepare the viewport */
