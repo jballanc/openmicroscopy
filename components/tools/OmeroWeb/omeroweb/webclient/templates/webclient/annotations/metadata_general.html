@@ -653,25 +653,25 @@
             {% endif %}
             
             {% if manager.well %}            
+            {% with image=manager.well.getWellSample.image %}
 
-            {% with image=manager.well.getWellSample.image disableDownload=manager.isDownloadDisabled omeTiffDisabled=True %}
+            {% with disableDownload=manager.isDownloadDisabled omeTiffDisabled=True %}
                 {% include "webclient/annotations/includes/toolbar.html" %}
             {% endwith %}
 
                         <!-- Image (in WellSample) Description -->
-            {% with obj=manager.well.getWellSample.image nameText=manager.well.getWellSample.image.name %}
+            {% with obj=image nameText=image.name %}
                 {% include "webclient/annotations/includes/name.html" %}
             {% endwith %}
 
-                   
-
              <h2 class="data_heading_id" style="float:left">
-                Image ID: <strong>{{ manager.well.getWellSample.image.id }}</strong>
+                Image ID: <strong>{{ image.id }}</strong>
                 Well ID: <strong>{{ manager.well.id }}</strong>
             </h2>
+
             
             <button class="btn silver btn_text" href="#" style="float:right"
-                onclick="return OME.openPopup('{% url 'web_image_viewer' manager.well.getWellSample.image.id %}')" alt="View" title="Open full viewer">
+                onclick="return OME.openPopup('{% url 'web_image_viewer' image.id %}')" alt="View" title="Open full viewer">
                 <span>
                 {% trans "Launch full viewer" %} 
                 </span>
@@ -679,28 +679,29 @@
             
             <div style="clear:both"></div>
 
-            {% if manager.well.getWellSample.image.showOriginalFilePaths %}
+            {% if image.showOriginalFilePaths %}
             <!-- duplicated under 'image' above -->
             <div style="clear:both"></div>
             <div id="fs_paths_popup" style="display:none; background: #fff; border: solid 1px #ddd; margin-bottom:5px">
                 <img title="Close" src="{% static 'webgateway/img/close.gif' %}" style="float:right; margin:3px"/>
-                <div style="margin: 4px">{{ manager.well.getWellSample.image.getImportedFilesInfo.count }} Image file{{ manager.well.getWellSample.image.getImportedFilesInfo.count|pluralize:'s'}}:</div>
+                <div style="margin: 4px">{{ image.countImportedImageFiles }} Image file{{ image.countImportedImageFiles|pluralize:'s'}}:</div>
                 <textarea readonly="true" style="width:99%; float:right; resize:none; border:none; padding:5px 0 0 0; margin:0px"></textarea>
                 <div style="clear:both"></div>
             </div>
             {% endif %}
 
+
             <hr/>
             
                         <!-- Image (in WellSample) Description -->
-            {% with obj=manager.well.getWellSample.image %}
+            {% with obj=image %}
                 {% include "webclient/annotations/includes/description.html" %}
             {% endwith %}
 
             <!-- Include table of core metadata, Owner, SizeX,Y,Z, Channels etc -->
-            {% with image=manager.well.getWellSample.image %}
-                {% include "webclient/annotations/includes/core_metadata.html" %}
-            {% endwith %}
+            {% include "webclient/annotations/includes/core_metadata.html" %}
+
+            {% endwith %}{# "image=manager.well.getWellSample.image" #}
 
             {% else %}
                 {% if manager.acquisition %}
