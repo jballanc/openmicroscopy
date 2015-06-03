@@ -66,7 +66,7 @@ class TestImgDetail(IWebTest):
         # Channels metadata
         assert len(imgData['channels']) == 1
         assert imgData['channels'][0] == {
-            'color': "808080",
+            'color': "0000FF",
             'active': True,
             'window': {
                 'max': 651,
