@@ -51,7 +51,7 @@
     <property name="defaultFilterCondition" value="true"/>
   </bean>
 
-  <bean id="allGroupSecurityFilter" class="ome.security.basic.AllGroupsSecurityFilter">
+  <bean id="allGroupSecurityFilter" class="${omero.security.all_groups_filter_class}">
     <constructor-arg ref="simpleSqlAction"/>
     <constructor-arg ref="roles"/>
     <property name="defaultFilterCondition" value="true"/>

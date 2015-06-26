@@ -4,6 +4,6 @@
     "http://hibernate.sourceforge.net/hibernate-mapping-3.0.dtd" >
 
 <hibernate-mapping>
-  <filter-def name="AllGroupsSecurityFilter" condition="1=1"/>
+  <filter-def name="${omero.filter.all_groups_filter_class}" condition="1=1"/>
   <filter-def name="OneGroupSecurityFilter" condition="1=1"/>
 </hibernate-mapping>

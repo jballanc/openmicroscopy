@@ -53,7 +53,7 @@
     <constructor-arg ref="roles"/>
   </bean>
 
-  <bean id="AllGroupsSecurityFilter" class="ome.security.basic.AllGroupsSecurityFilter">
+  <bean id="AllGroupsSecurityFilter" class="${omero.security.all_groups_filter_class}">
     <constructor-arg ref="simpleSqlAction"/>
     <constructor-arg ref="roles"/>
   </bean>

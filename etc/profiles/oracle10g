@@ -15,5 +15,5 @@ omero.db.delimiter=;
 omero.db.test_query=select 1 from dual
 omero.db.defer=deferrable initially deferred
 omero.db.temp_ids_limit=500
-
+omero.security.all_groups_filter_class=ome.security.basic.AllGroupsOracleSecurityFilter
 omero.security.filter.bitand=(bitand(permissions,%s) = %s)

@@ -15,4 +15,5 @@ omero.db.delimiter=;;
 omero.db.test_query=select 1
 omero.db.defer=
 omero.db.temp_ids=false
+omero.security.all_groups_filter_class=ome.security.basic.AllGroupsSecurityFilter
 omero.security.filter.bitand=(int8and(permissions,%s) = %s)
