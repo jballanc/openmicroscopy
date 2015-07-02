@@ -204,6 +204,12 @@ public abstract class ListAsSQLArrayUserType<T> implements UserType, Parameteriz
                         // ok. String[0][] got changed to String[0]
                         return new ArrayList<String[]>(0);
                     }
+                } else if (Object[].class.isAssignableFrom(array.getClass())) {
+                    // Oracle doesn't type result arrays if they're empty
+                    Object[] objects = (Object[]) array;
+                    if (objects.length == 0) {
+                        return new ArrayList<String[]>(0);
+                    }
                 }
                 throw new RuntimeException("ticket:2290 - bad array type: " + array);
             }
