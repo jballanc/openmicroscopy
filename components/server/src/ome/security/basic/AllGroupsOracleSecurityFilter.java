@@ -34,7 +34,7 @@ public class AllGroupsOracleSecurityFilter extends AllGroupsSecurityFilter {
         super(sql, roles);
     }
 
-    private static String myFilterCondition() {
+    protected String myFilterCondition() {
         return String.format(
                   "\n( "
                 + "\n  1 = :is_share OR "
