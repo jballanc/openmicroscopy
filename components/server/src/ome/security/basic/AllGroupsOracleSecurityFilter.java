@@ -26,7 +26,16 @@ import ome.util.SqlAction;
  */
 public class AllGroupsOracleSecurityFilter extends AllGroupsSecurityFilter {
 
-    private static String myFilterCondition = String.format(
+    public AllGroupsOracleSecurityFilter(SqlAction sql) {
+        this(sql, new Roles());
+    }
+
+    public AllGroupsOracleSecurityFilter(SqlAction sql, Roles roles) {
+        super(sql, roles);
+    }
+
+    private static String myFilterCondition() {
+        return String.format(
                   "\n( "
                 + "\n  1 = :is_share OR "
                 + "\n  1 = :is_admin OR "
@@ -37,18 +46,6 @@ public class AllGroupsOracleSecurityFilter extends AllGroupsSecurityFilter {
                 + "\n)"
                 + "\n", isGranted(USER, READ), isGranted(GROUP, READ),
                 isGranted(WORLD, READ));
-
-    public AllGroupsOracleSecurityFilter(SqlAction sql) {
-        this(sql, new Roles());
-    }
-
-    public AllGroupsOracleSecurityFilter(SqlAction sql, Roles roles) {
-        super(sql, roles);
-    }
-
-    @Override
-    public String getDefaultCondition() {
-        return String.format(myFilterCondition, roles.getUserGroupId());
     }
 
     @Override
