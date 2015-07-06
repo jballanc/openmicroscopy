@@ -414,7 +414,7 @@ class ITest(object):
                 self.root.sf.getUpdateService().indexObject(
                     obj, {"omero.group": "-1"})
 
-    def waitOnCmd(self, client, handle, loops=10, ms=500, passes=True):
+    def waitOnCmd(self, client, handle, loops=10, ms=3000, passes=True):
         """
         Wait on an omero.cmd.HandlePrx to finish processing
         and then assert pass or fail. The callback is returned
