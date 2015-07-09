@@ -18,6 +18,7 @@ import java.util.Set;
 import ome.security.ACLEventListener;
 import ome.security.ACLVoter;
 import ome.tools.hibernate.EventMethodInterceptor;
+import ome.tools.hibernate.EmptyStringEventListener;
 import ome.tools.hibernate.ReloadingRefreshEventListener;
 
 import org.aopalliance.aop.Advice;
@@ -166,6 +167,9 @@ public class EventListenersFactoryBean extends AbstractFactoryBean {
 
         UpdateEventListener uel = new UpdateEventListener(cd);
         append("pre-update", uel);
+
+        EmptyStringEventListener esel = new EmptyStringEventListener();
+        append("pre-insert", esel);
 
         if (debugAll) {
             Object debug = getDebuggingProxy();
