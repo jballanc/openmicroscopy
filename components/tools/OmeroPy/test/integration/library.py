@@ -717,7 +717,7 @@ class ITest(object):
         assert State.FAILURE not in prx.getStatus().flags
 
         cb = CmdCallbackI(client, prx)
-        cb.loop(20, 500)
+        cb.loop(20, 3000)
 
         assert prx.getResponse() is not None
 
