@@ -57,7 +57,7 @@
     <property name="defaultFilterCondition" value="true"/>
   </bean>
 
-  <bean id="eventListeners" class="ome.security.basic.EventListenersFactoryBean"
+  <bean id="eventListeners" class="${omero.security.event_listeners_factory_class}"
       depends-on="serverDirectoryCheck">
     <constructor-arg ref="currentDetails"/>
     <constructor-arg ref="tokenHolder"/>

@@ -66,7 +66,7 @@
 
   <!-- These might should be moved to a third security tier -->
 
-  <bean id="eventListeners" class="ome.security.basic.EventListenersFactoryBean">
+  <bean id="eventListeners" class="${omero.security.event_listeners_factory_class}">
     <description>
     Used by hibernate.xml during the creation of SessionFactory.
     </description>
