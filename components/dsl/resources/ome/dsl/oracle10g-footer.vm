@@ -193,8 +193,8 @@ RETURN NUMBER
 IS
     eid NUMBER;
 BEGIN
-    eid := current_event();
-    IF eid = 0 OR eid IS NULL
+    select current_event() into eid from dual;
+    IF NVL(eid,0) = 0
     THEN
         eid := ome_nextval('seq_event');
         INSERT INTO event (id, permissions, status, time, experimenter,
