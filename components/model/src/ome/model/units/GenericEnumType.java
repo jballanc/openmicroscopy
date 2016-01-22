@@ -7,6 +7,7 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Properties;
 
+import org.hibernate.engine.spi.SessionImplementor;
 import org.hibernate.HibernateException;
 import org.hibernate.usertype.ParameterizedType;
 import org.hibernate.usertype.UserType;
@@ -58,7 +59,7 @@ public class GenericEnumType<E extends Enum<E>> implements UserType, Parameteriz
         return false;
     }
 
-    public Object nullSafeGet(ResultSet rs, String[] names, Object owner)
+    public Object nullSafeGet(ResultSet rs, String[] names, SessionImplementor impl, Object owner)
             throws HibernateException, SQLException {
         String value = rs.getString(names[0]);
         if (!rs.wasNull()) {
@@ -67,7 +68,7 @@ public class GenericEnumType<E extends Enum<E>> implements UserType, Parameteriz
         return null;
     }
 
-    public void nullSafeSet(PreparedStatement ps, Object obj, int index)
+    public void nullSafeSet(PreparedStatement ps, Object obj, int index, SessionImplementor impl)
             throws HibernateException, SQLException {
         if (obj == null) {
             // Note: units.sqlType shouldn't be used since this
